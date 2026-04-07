@@ -1,0 +1,26 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: workflow-departamental
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/workflow_db
+      auto-index-creation: true
+
+# Logging
+logging:
+  level:
+    root: INFO
+    com.workflow: DEBUG
+    org.springframework.data.mongodb: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Custom application properties
+app:
+  cors:
+    allowed-origins: http://localhost:4200
+  workflow:
+    tracking-prefix: "WF"
