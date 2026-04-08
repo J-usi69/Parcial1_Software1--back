@@ -19,12 +19,4 @@ public class AsignarUsuarioRequest {
     @NotBlank(message = "El usuario a asignar es obligatorio")
     @Schema(description = "Identificador del usuario que será responsable de la solicitud", example = "maria.revisora")
     private String usuarioAsignado;
-
-    @NotBlank(message = "El usuario responsable (el que realiza la acción) es obligatorio")
-    @Schema(description = "Identificador del usuario que realiza la operación actual", example = "admin.sistema")
-    private String usuarioResponsable;
-
-    @NotNull(message = "El rol del usuario que realiza la acción es obligatorio")
-    @Schema(description = "Rol de quien asigna (generalmente ADMIN o Jefe de Revisor)", example = "ADMINISTRADOR")
-    private RolUsuario rolUsuario;
 }

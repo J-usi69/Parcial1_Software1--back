@@ -20,11 +20,5 @@ public class ReasignarDepartamentoRequest {
     @NotBlank(message = "El nuevo departamento es obligatorio")
     private String nuevoDepartamento;
 
-    @NotBlank(message = "El usuario responsable es obligatorio")
-    private String usuarioResponsable;
-
-    @NotNull(message = "El rol del usuario es obligatorio")
-    private RolUsuario rolUsuario;
-
     private String comentario;
 }

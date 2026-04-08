@@ -12,6 +12,7 @@ import com.workflow.exception.ResourceNotFoundException;
 import com.workflow.exception.UnauthorizedActionException;
 import com.workflow.mapper.SolicitudMapper;
 import com.workflow.repository.SolicitudWorkflowRepository;
+import com.workflow.repository.UsuarioRepository;
 import com.workflow.service.CodigoSeguimientoGenerator;
 import com.workflow.service.WorkflowService;
 import jakarta.annotation.PostConstruct;
@@ -21,9 +22,12 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.Year;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Implementación del servicio de workflow departamental.
@@ -39,7 +43,14 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class WorkflowServiceImpl implements WorkflowService {
 
+    private static final List<String> DEPARTAMENTOS_VALIDOS = List.of(
+            "Sistemas",
+            "Ventas",
+            "Recursos Humanos"
+    );
+
     private final SolicitudWorkflowRepository repository;
+    private final UsuarioRepository usuarioRepository;
     private final SolicitudMapper mapper;
     private final CodigoSeguimientoGenerator codigoGenerator;
 
@@ -70,29 +81,32 @@ public class WorkflowServiceImpl implements WorkflowService {
     // ═══════════════════════════════════════════════════════════════
 
     @Override
-    public SolicitudResponse crearSolicitud(CrearSolicitudRequest request) {
+    public SolicitudResponse crearSolicitud(CrearSolicitudRequest request, String usuarioCreador, RolUsuario rolUsuario) {
         // Validar que solo SOLICITANTE o ADMINISTRADOR pueden crear
-        if (!request.getRolUsuario().puedeCrearSolicitud()) {
+        if (!rolUsuario.puedeCrearSolicitud()) {
             throw new UnauthorizedActionException(
-                    request.getRolUsuario().name(),
+                    rolUsuario.name(),
                     "crear solicitudes de workflow"
             );
         }
 
+        String departamentoNormalizado = normalizarDepartamento(request.getDepartamentoDestino());
+        request.setDepartamentoDestino(departamentoNormalizado);
+
         String codigo = codigoGenerator.generarCodigo();
-        SolicitudWorkflow solicitud = mapper.toEntity(request, codigo);
+        SolicitudWorkflow solicitud = mapper.toEntity(request, codigo, usuarioCreador);
 
         // Registrar evento de creación en el historial
         solicitud.registrarTransicion(
                 null,
                 EstadoWorkflow.PENDIENTE,
-                request.getUsuarioCreador(),
-                request.getRolUsuario().name(),
+                usuarioCreador,
+                rolUsuario.name(),
                 "Solicitud creada"
         );
 
         SolicitudWorkflow guardada = repository.save(solicitud);
-        log.info("Solicitud creada: {} por usuario: {}", codigo, request.getUsuarioCreador());
+        log.info("Solicitud creada: {} por usuario: {}", codigo, usuarioCreador);
 
         return mapper.toResponse(guardada);
     }
@@ -155,9 +169,9 @@ public class WorkflowServiceImpl implements WorkflowService {
     // ═══════════════════════════════════════════════════════════════
 
     @Override
-    public SolicitudResponse cambiarEstado(String id, CambiarEstadoRequest request) {
+    public SolicitudResponse cambiarEstado(String id, CambiarEstadoRequest request, String usuarioResponsable, RolUsuario rolUsuario, String departamentoUsuario) {
         SolicitudWorkflow solicitud = buscarSolicitudPorId(id);
-        RolUsuario rol = request.getRolUsuario();
+        RolUsuario rol = rolUsuario;
         EstadoWorkflow estadoActual = solicitud.getEstado();
         EstadoWorkflow nuevoEstado = request.getNuevoEstado();
 
@@ -167,7 +181,7 @@ public class WorkflowServiceImpl implements WorkflowService {
                     estadoActual, nuevoEstado, id);
         } else if (rol == RolUsuario.REVISOR) {
             // Validar que el REVISOR pertenece al departamento de la solicitud
-            validarDepartamentoRevisor(solicitud, request.getDepartamentoUsuario());
+            validarDepartamentoRevisor(solicitud, departamentoUsuario);
 
             // Validar la transición de estado según la máquina de estados
             if (!estadoActual.puedeTransicionarA(nuevoEstado)) {
@@ -187,14 +201,14 @@ public class WorkflowServiceImpl implements WorkflowService {
         solicitud.registrarTransicion(
                 estadoActual,
                 nuevoEstado,
-                request.getUsuarioResponsable(),
+                usuarioResponsable,
                 rol.name(),
                 request.getComentario()
         );
 
         SolicitudWorkflow actualizada = repository.save(solicitud);
         log.info("Estado cambiado: {} -> {} en solicitud {} por {}",
-                estadoActual, nuevoEstado, id, request.getUsuarioResponsable());
+                estadoActual, nuevoEstado, id, usuarioResponsable);
 
         return mapper.toResponse(actualizada);
     }
@@ -204,37 +218,87 @@ public class WorkflowServiceImpl implements WorkflowService {
     // ═══════════════════════════════════════════════════════════════
 
     @Override
-    public SolicitudResponse reasignarDepartamento(String id, ReasignarDepartamentoRequest request) {
-        if (!request.getRolUsuario().puedeAdministrar()) {
+    public SolicitudResponse reasignarDepartamento(
+            String id,
+            ReasignarDepartamentoRequest request,
+            String usuarioResponsable,
+            RolUsuario rolUsuario,
+            String departamentoUsuario
+    ) {
+        SolicitudWorkflow solicitud = buscarSolicitudPorId(id);
+
+        if (rolUsuario.puedeAdministrar()) {
+            log.info("ADMIN reasignando departamento en solicitud {}", id);
+        } else if (rolUsuario == RolUsuario.REVISOR) {
+            validarDepartamentoRevisor(solicitud, departamentoUsuario);
+            log.info("REVISOR '{}' reasignando solicitud {}", usuarioResponsable, id);
+        } else {
             throw new UnauthorizedActionException(
-                    request.getRolUsuario().name(),
+                    rolUsuario.name(),
                     "reasignar departamentos"
             );
         }
 
-        SolicitudWorkflow solicitud = buscarSolicitudPorId(id);
         String departamentoAnterior = solicitud.getDepartamentoActual();
+        String departamentoNormalizado = normalizarDepartamento(request.getNuevoDepartamento());
 
-        solicitud.setDepartamentoActual(request.getNuevoDepartamento());
+        if (departamentoAnterior != null && departamentoAnterior.equalsIgnoreCase(departamentoNormalizado)) {
+            throw new IllegalArgumentException("La solicitud ya está en el departamento indicado");
+        }
+
+        solicitud.setDepartamentoActual(departamentoNormalizado);
 
         // Registrar la reasignación en el historial
         solicitud.registrarTransicion(
                 solicitud.getEstado(),
                 solicitud.getEstado(), // El estado no cambia, solo el departamento
-                request.getUsuarioResponsable(),
-                request.getRolUsuario().name(),
+                usuarioResponsable,
+                rolUsuario.name(),
                 String.format("Reasignado de '%s' a '%s'. %s",
                         departamentoAnterior,
-                        request.getNuevoDepartamento(),
+                departamentoNormalizado,
                         request.getComentario() != null ? request.getComentario() : "")
         );
 
         SolicitudWorkflow actualizada = repository.save(solicitud);
         log.info("Solicitud {} reasignada de '{}' a '{}' por {}",
-                id, departamentoAnterior, request.getNuevoDepartamento(),
-                request.getUsuarioResponsable());
+            id, departamentoAnterior, departamentoNormalizado,
+                usuarioResponsable);
 
         return mapper.toResponse(actualizada);
+    }
+
+    @Override
+    public List<String> obtenerCatalogoDepartamentos() {
+        return DEPARTAMENTOS_VALIDOS;
+    }
+
+    @Override
+    public Map<String, Object> obtenerRecomendacionReasignacion(String id) {
+        SolicitudWorkflow solicitud = buscarSolicitudPorId(id);
+        String departamentoActual = solicitud.getDepartamentoActual();
+
+        Map<String, Long> colaPendiente = new LinkedHashMap<>();
+        for (String departamento : DEPARTAMENTOS_VALIDOS) {
+            long cantidad = repository.countByDepartamentoActualIgnoreCaseAndEstado(
+                    departamento,
+                    EstadoWorkflow.PENDIENTE
+            );
+            colaPendiente.put(departamento, cantidad);
+        }
+
+        String departamentoSugerido = DEPARTAMENTOS_VALIDOS.stream()
+                .filter(dep -> departamentoActual == null || !dep.equalsIgnoreCase(departamentoActual))
+                .min(Comparator.comparingLong(dep -> colaPendiente.getOrDefault(dep, 0L)))
+                .orElse(null);
+
+        Map<String, Object> recomendacion = new LinkedHashMap<>();
+        recomendacion.put("departamentoActual", departamentoActual);
+        recomendacion.put("departamentoSugerido", departamentoSugerido);
+        recomendacion.put("colaPendiente", colaPendiente);
+        recomendacion.put("departamentosDisponibles", DEPARTAMENTOS_VALIDOS);
+
+        return recomendacion;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -248,8 +312,27 @@ public class WorkflowServiceImpl implements WorkflowService {
             throw new UnauthorizedActionException(rol.name(), "asignar usuarios a solicitudes");
         }
 
+        if (!usuarioRepository.existsByUsername(usuarioAsignado)) {
+            throw new ResourceNotFoundException("Usuario", "username", usuarioAsignado);
+        }
+
         SolicitudWorkflow solicitud = buscarSolicitudPorId(id);
+        String usuarioAnterior = solicitud.getUsuarioAsignado();
         solicitud.setUsuarioAsignado(usuarioAsignado);
+
+        String comentario = String.format(
+                "Asignación de responsable: '%s' -> '%s'",
+                usuarioAnterior != null ? usuarioAnterior : "sin asignar",
+                usuarioAsignado
+        );
+
+        solicitud.registrarTransicion(
+                solicitud.getEstado(),
+                solicitud.getEstado(),
+                usuarioResponsable,
+                rol.name(),
+                comentario
+        );
 
         SolicitudWorkflow actualizada = repository.save(solicitud);
         log.info("Usuario '{}' asignado a solicitud {} por {}", usuarioAsignado, id, usuarioResponsable);
@@ -298,5 +381,27 @@ public class WorkflowServiceImpl implements WorkflowService {
                             departamentoUsuario, solicitud.getDepartamentoActual())
             );
         }
+    }
+
+    /**
+     * Normaliza y valida el departamento contra el catálogo fijo de la aplicación.
+     */
+    private String normalizarDepartamento(String departamento) {
+        if (departamento == null || departamento.isBlank()) {
+            throw new IllegalArgumentException("El departamento es obligatorio");
+        }
+
+        String valor = departamento.trim();
+
+        return DEPARTAMENTOS_VALIDOS.stream()
+                .filter(dep -> dep.equalsIgnoreCase(valor))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        String.format(
+                                "Departamento '%s' no válido. Valores permitidos: %s",
+                                departamento,
+                                DEPARTAMENTOS_VALIDOS.stream().collect(Collectors.joining(", "))
+                        )
+                ));
     }
 }

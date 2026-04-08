@@ -22,8 +22,8 @@ public class CorsConfig {
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
 
-        // Orígenes permitidos (desde application.yml)
-        config.setAllowedOrigins(List.of(allowedOrigins.split(",")));
+        // Orígenes permitidos (uso de patrones para máxima compatibilidad)
+        config.setAllowedOriginPatterns(List.of("*"));
 
         // Métodos HTTP permitidos
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
@@ -35,8 +35,9 @@ public class CorsConfig {
                 "Accept",
                 "Origin",
                 "X-Requested-With",
-                "X-User-Role",
-                "X-User-Department"
+                "X-Usuario",
+                "X-Rol",
+                "X-Departamento"
         ));
 
         // Headers expuestos al frontend

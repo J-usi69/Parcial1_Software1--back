@@ -32,10 +32,4 @@ public class CrearSolicitudRequest {
 
     @NotBlank(message = "El departamento es obligatorio")
     private String departamentoDestino;
-
-    @NotBlank(message = "El usuario creador es obligatorio")
-    private String usuarioCreador;
-
-    @NotNull(message = "El rol del usuario es obligatorio")
-    private RolUsuario rolUsuario;
 }
