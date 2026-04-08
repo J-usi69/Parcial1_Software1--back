@@ -76,14 +76,14 @@ public class SolicitudMapper {
     /**
      * Convierte un DTO de creación al modelo de dominio.
      */
-    public SolicitudWorkflow toEntity(CrearSolicitudRequest request, String codigoSeguimiento) {
+    public SolicitudWorkflow toEntity(CrearSolicitudRequest request, String codigoSeguimiento, String usuarioCreador) {
         return SolicitudWorkflow.builder()
                 .codigoSeguimiento(codigoSeguimiento)
                 .titulo(request.getTitulo())
                 .descripcion(request.getDescripcion())
                 .prioridad(request.getPrioridad())
                 .departamentoActual(request.getDepartamentoDestino())
-                .usuarioCreador(request.getUsuarioCreador())
+                .usuarioCreador(usuarioCreador)
                 .build();
     }
 }

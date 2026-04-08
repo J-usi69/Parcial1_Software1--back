@@ -21,7 +21,7 @@ public interface WorkflowService {
      * Crea una nueva solicitud de workflow.
      * Solo SOLICITANTE y ADMINISTRADOR pueden crear solicitudes.
      */
-    SolicitudResponse crearSolicitud(CrearSolicitudRequest request);
+    SolicitudResponse crearSolicitud(CrearSolicitudRequest request, String usuarioCreador, RolUsuario rolUsuario);
 
     /**
      * Obtiene una solicitud por su ID.
@@ -57,12 +57,28 @@ public interface WorkflowService {
     /**
      * Cambia el estado de una solicitud validando permisos y transiciones.
      */
-    SolicitudResponse cambiarEstado(String id, CambiarEstadoRequest request);
+    SolicitudResponse cambiarEstado(String id, CambiarEstadoRequest request, String usuarioResponsable, RolUsuario rolUsuario, String departamentoUsuario);
 
     /**
      * Reasigna una solicitud a otro departamento (solo ADMINISTRADOR).
      */
-    SolicitudResponse reasignarDepartamento(String id, ReasignarDepartamentoRequest request);
+        SolicitudResponse reasignarDepartamento(
+            String id,
+            ReasignarDepartamentoRequest request,
+            String usuarioResponsable,
+            RolUsuario rolUsuario,
+            String departamentoUsuario
+        );
+
+        /**
+         * Obtiene catálogo fijo de departamentos válidos para el workflow.
+         */
+        List<String> obtenerCatalogoDepartamentos();
+
+        /**
+         * Obtiene recomendación de reasignación manual basada en cola PENDIENTE.
+         */
+        Map<String, Object> obtenerRecomendacionReasignacion(String id);
 
     /**
      * Asigna un usuario revisor a una solicitud.
