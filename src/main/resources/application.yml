@@ -24,3 +24,12 @@ app:
     allowed-origins: http://localhost:4200
   workflow:
     tracking-prefix: "WF"
+    presencia:
+      online-window-seconds: 120
+      cleanup-fixed-delay-ms: 60000
+      cleanup-initial-delay-ms: 15000
+    sla:
+      monitor:
+        enabled: true
+        fixed-delay-ms: 300000
+        initial-delay-ms: 20000

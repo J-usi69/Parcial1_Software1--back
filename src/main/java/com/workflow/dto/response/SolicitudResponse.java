@@ -1,5 +1,6 @@
 package com.workflow.dto.response;
 
+import com.workflow.domain.enums.EstadoSla;
 import com.workflow.domain.enums.EstadoWorkflow;
 import com.workflow.domain.enums.Prioridad;
 import lombok.AllArgsConstructor;
@@ -31,5 +32,10 @@ public class SolicitudResponse {
     private List<EventoHistorialResponse> historial;
     private LocalDateTime fechaCreacion;
     private LocalDateTime fechaActualizacion;
+    private LocalDateTime fechaLimiteAtencion;
+    private LocalDateTime fechaPrimeraAlertaSla;
+    private LocalDateTime fechaEscalamientoSla;
+    private EstadoSla estadoSla;
+    private Long minutosRestantesSla;
     private int totalEventos;
 }

@@ -1,6 +1,8 @@
 package com.workflow.service.impl;
 
+import com.workflow.domain.enums.EstadoSla;
 import com.workflow.domain.enums.EstadoWorkflow;
+import com.workflow.domain.enums.Prioridad;
 import com.workflow.domain.enums.RolUsuario;
 import com.workflow.domain.model.SolicitudWorkflow;
 import com.workflow.dto.request.CambiarEstadoRequest;
@@ -21,7 +23,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.time.Year;
+import java.util.EnumMap;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -47,6 +52,13 @@ public class WorkflowServiceImpl implements WorkflowService {
             "Sistemas",
             "Ventas",
             "Recursos Humanos"
+    );
+
+    private static final Map<Prioridad, Long> SLA_HORAS_POR_PRIORIDAD = Map.of(
+            Prioridad.URGENTE, 4L,
+            Prioridad.ALTA, 8L,
+            Prioridad.MEDIA, 24L,
+            Prioridad.BAJA, 72L
     );
 
     private final SolicitudWorkflowRepository repository;
@@ -95,6 +107,10 @@ public class WorkflowServiceImpl implements WorkflowService {
 
         String codigo = codigoGenerator.generarCodigo();
         SolicitudWorkflow solicitud = mapper.toEntity(request, codigo, usuarioCreador);
+
+        Prioridad prioridadSla = solicitud.getPrioridad() != null ? solicitud.getPrioridad() : Prioridad.MEDIA;
+        solicitud.setPrioridad(prioridadSla);
+        solicitud.setFechaLimiteAtencion(calcularFechaLimite(prioridadSla, LocalDateTime.now()));
 
         // Registrar evento de creación en el historial
         solicitud.registrarTransicion(
@@ -347,14 +363,42 @@ public class WorkflowServiceImpl implements WorkflowService {
     @Override
     public Map<String, Object> obtenerEstadisticas() {
         Map<String, Object> stats = new HashMap<>();
+        List<SolicitudWorkflow> solicitudes = repository.findAll();
 
-        stats.put("totalSolicitudes", repository.count());
+        stats.put("totalSolicitudes", solicitudes.size());
 
         Map<String, Long> porEstado = new HashMap<>();
         for (EstadoWorkflow estado : EstadoWorkflow.values()) {
             porEstado.put(estado.name(), repository.countByEstado(estado));
         }
         stats.put("porEstado", porEstado);
+
+        Map<String, Long> porSla = new LinkedHashMap<>();
+        Map<EstadoSla, Long> conteoSla = new EnumMap<>(EstadoSla.class);
+        for (EstadoSla estadoSla : EstadoSla.values()) {
+            conteoSla.put(estadoSla, 0L);
+        }
+
+        LocalDateTime ahora = LocalDateTime.now();
+        for (SolicitudWorkflow solicitud : solicitudes) {
+            EstadoSla estadoSla = calcularEstadoSla(solicitud, ahora);
+            conteoSla.put(estadoSla, conteoSla.get(estadoSla) + 1);
+        }
+
+        for (EstadoSla estadoSla : EstadoSla.values()) {
+            porSla.put(estadoSla.name(), conteoSla.get(estadoSla));
+        }
+        stats.put("porSla", porSla);
+
+        long totalAlertasSla = solicitudes.stream()
+            .filter(s -> s.getFechaPrimeraAlertaSla() != null)
+            .count();
+        long totalEscaladasSla = solicitudes.stream()
+            .filter(s -> s.getFechaEscalamientoSla() != null)
+            .count();
+
+        stats.put("totalAlertasSla", totalAlertasSla);
+        stats.put("totalEscaladasSla", totalEscaladasSla);
 
         return stats;
     }
@@ -403,5 +447,34 @@ public class WorkflowServiceImpl implements WorkflowService {
                                 DEPARTAMENTOS_VALIDOS.stream().collect(Collectors.joining(", "))
                         )
                 ));
+    }
+
+    private LocalDateTime calcularFechaLimite(Prioridad prioridad, LocalDateTime base) {
+        Prioridad prioridadEfectiva = prioridad != null ? prioridad : Prioridad.MEDIA;
+        Long horasSla = SLA_HORAS_POR_PRIORIDAD.getOrDefault(prioridadEfectiva, 24L);
+        return base.plusHours(horasSla);
+    }
+
+    private EstadoSla calcularEstadoSla(SolicitudWorkflow solicitud, LocalDateTime referencia) {
+        EstadoWorkflow estado = solicitud.getEstado();
+        if (estado == EstadoWorkflow.APROBADO || estado == EstadoWorkflow.RECHAZADO) {
+            return EstadoSla.CERRADO;
+        }
+
+        LocalDateTime fechaLimite = solicitud.getFechaLimiteAtencion();
+        if (fechaLimite == null) {
+            return EstadoSla.EN_TIEMPO;
+        }
+
+        long minutosRestantes = Duration.between(referencia, fechaLimite).toMinutes();
+        if (minutosRestantes <= 0) {
+            return EstadoSla.VENCIDO;
+        }
+
+        if (minutosRestantes <= 240) {
+            return EstadoSla.POR_VENCER;
+        }
+
+        return EstadoSla.EN_TIEMPO;
     }
 }

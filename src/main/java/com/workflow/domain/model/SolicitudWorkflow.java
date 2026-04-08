@@ -66,6 +66,13 @@ public class SolicitudWorkflow {
     @LastModifiedDate
     private LocalDateTime fechaActualizacion;
 
+    @Indexed
+    private LocalDateTime fechaLimiteAtencion;
+
+    private LocalDateTime fechaPrimeraAlertaSla;
+
+    private LocalDateTime fechaEscalamientoSla;
+
     /**
      * Agrega un evento de historial atómicamente al workflow.
      */
