@@ -55,6 +55,11 @@ public interface SolicitudWorkflowRepository extends MongoRepository<SolicitudWo
     List<SolicitudWorkflow> findByEstadoOrderByFechaCreacionDesc(EstadoWorkflow estado);
 
     /**
+     * Busca solicitudes por un conjunto de estados (útil para monitoreo SLA).
+     */
+    List<SolicitudWorkflow> findByEstadoIn(List<EstadoWorkflow> estados);
+
+    /**
      * Busca por usuario asignado.
      */
     List<SolicitudWorkflow> findByUsuarioAsignadoOrderByFechaCreacionDesc(String usuarioAsignado);

@@ -1,5 +1,6 @@
 package com.workflow.service;
 
+import com.workflow.domain.enums.RolUsuario;
 import com.workflow.dto.request.ChatIARequest;
 import com.workflow.dto.response.ChatIAResponse;
 
@@ -12,5 +13,5 @@ public interface ChatIAService {
     /**
      * Procesa la entrada del usuario y devuelve una respuesta estructurada.
      */
-    ChatIAResponse procesarMensaje(ChatIARequest request);
+    ChatIAResponse procesarMensaje(ChatIARequest request, RolUsuario rolUsuario, String departamentoUsuario);
 }

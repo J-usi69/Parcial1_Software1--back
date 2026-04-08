@@ -1,5 +1,8 @@
 package com.workflow.mapper;
 
+import com.workflow.domain.enums.EstadoSla;
+import com.workflow.domain.enums.EstadoWorkflow;
+import com.workflow.domain.enums.Prioridad;
 import com.workflow.domain.model.EventoHistorial;
 import com.workflow.domain.model.SolicitudWorkflow;
 import com.workflow.dto.request.CrearSolicitudRequest;
@@ -7,8 +10,12 @@ import com.workflow.dto.response.EventoHistorialResponse;
 import com.workflow.dto.response.SolicitudResponse;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.EnumMap;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -17,6 +24,15 @@ import java.util.stream.Collectors;
  */
 @Component
 public class SolicitudMapper {
+
+    private static final Map<Prioridad, Long> SLA_HORAS_POR_PRIORIDAD = new EnumMap<>(Prioridad.class);
+
+    static {
+        SLA_HORAS_POR_PRIORIDAD.put(Prioridad.URGENTE, 4L);
+        SLA_HORAS_POR_PRIORIDAD.put(Prioridad.ALTA, 8L);
+        SLA_HORAS_POR_PRIORIDAD.put(Prioridad.MEDIA, 24L);
+        SLA_HORAS_POR_PRIORIDAD.put(Prioridad.BAJA, 72L);
+    }
 
     /**
      * Convierte una entidad SolicitudWorkflow a su DTO de respuesta.
@@ -29,6 +45,11 @@ public class SolicitudMapper {
                     .map(this::toEventoResponse)
                     .collect(Collectors.toList())
                 : Collections.emptyList();
+
+        LocalDateTime fechaLimiteSla = calcularFechaLimiteFallback(solicitud);
+
+        EstadoSla estadoSla = calcularEstadoSla(solicitud.getEstado(), fechaLimiteSla);
+        Long minutosRestantes = calcularMinutosRestantes(estadoSla, fechaLimiteSla);
 
         return SolicitudResponse.builder()
                 .id(solicitud.getId())
@@ -43,6 +64,11 @@ public class SolicitudMapper {
                 .historial(historialResponse)
                 .fechaCreacion(solicitud.getFechaCreacion())
                 .fechaActualizacion(solicitud.getFechaActualizacion())
+                .fechaLimiteAtencion(fechaLimiteSla)
+                .fechaPrimeraAlertaSla(solicitud.getFechaPrimeraAlertaSla())
+                .fechaEscalamientoSla(solicitud.getFechaEscalamientoSla())
+                .estadoSla(estadoSla)
+                .minutosRestantesSla(minutosRestantes)
                 .totalEventos(historialResponse.size())
                 .build();
     }
@@ -85,5 +111,48 @@ public class SolicitudMapper {
                 .departamentoActual(request.getDepartamentoDestino())
                 .usuarioCreador(usuarioCreador)
                 .build();
+    }
+
+    private LocalDateTime calcularFechaLimiteFallback(SolicitudWorkflow solicitud) {
+        if (solicitud.getFechaLimiteAtencion() != null) {
+            return solicitud.getFechaLimiteAtencion();
+        }
+
+        if (solicitud.getFechaCreacion() == null) {
+            return null;
+        }
+
+        Prioridad prioridad = solicitud.getPrioridad() != null ? solicitud.getPrioridad() : Prioridad.MEDIA;
+        long horas = SLA_HORAS_POR_PRIORIDAD.getOrDefault(prioridad, 24L);
+        return solicitud.getFechaCreacion().plusHours(horas);
+    }
+
+    private EstadoSla calcularEstadoSla(EstadoWorkflow estado, LocalDateTime fechaLimiteAtencion) {
+        if (estado == EstadoWorkflow.APROBADO || estado == EstadoWorkflow.RECHAZADO) {
+            return EstadoSla.CERRADO;
+        }
+
+        if (fechaLimiteAtencion == null) {
+            return EstadoSla.EN_TIEMPO;
+        }
+
+        long minutosRestantes = Duration.between(LocalDateTime.now(), fechaLimiteAtencion).toMinutes();
+        if (minutosRestantes <= 0) {
+            return EstadoSla.VENCIDO;
+        }
+
+        if (minutosRestantes <= 240) {
+            return EstadoSla.POR_VENCER;
+        }
+
+        return EstadoSla.EN_TIEMPO;
+    }
+
+    private Long calcularMinutosRestantes(EstadoSla estadoSla, LocalDateTime fechaLimiteAtencion) {
+        if (estadoSla == EstadoSla.CERRADO || fechaLimiteAtencion == null) {
+            return null;
+        }
+
+        return Duration.between(LocalDateTime.now(), fechaLimiteAtencion).toMinutes();
     }
 }
