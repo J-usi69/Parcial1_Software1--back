@@ -28,10 +28,11 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class PresenciaServiceImpl implements PresenciaService {
 
-    private static final Comparator<PresenciaUsuarioResponse> ORDEN_COLABORADORES =
-            Comparator.comparing(PresenciaUsuarioResponse::getDepartamento, Comparator.nullsLast(String::compareToIgnoreCase))
-                    .thenComparing(PresenciaUsuarioResponse::getNombreCompleto, Comparator.nullsLast(String::compareToIgnoreCase))
-                    .thenComparing(PresenciaUsuarioResponse::getUsername, Comparator.nullsLast(String::compareToIgnoreCase));
+    private static final Comparator<PresenciaUsuarioResponse> ORDEN_COLABORADORES = Comparator
+            .comparing(PresenciaUsuarioResponse::getDepartamento, Comparator.nullsLast(String::compareToIgnoreCase))
+            .thenComparing(PresenciaUsuarioResponse::getNombreCompleto,
+                    Comparator.nullsLast(String::compareToIgnoreCase))
+            .thenComparing(PresenciaUsuarioResponse::getUsername, Comparator.nullsLast(String::compareToIgnoreCase));
 
     private final UsuarioRepository usuarioRepository;
     private final Map<String, SesionPresencia> sesionesActivas = new ConcurrentHashMap<>();
@@ -44,13 +45,16 @@ public class PresenciaServiceImpl implements PresenciaService {
         private final String nombreCompleto;
         private final RolUsuario rol;
         private final String departamento;
+        private final String avatarUrl;
         private final LocalDateTime ultimoLatido;
 
-        private SesionPresencia(String username, String nombreCompleto, RolUsuario rol, String departamento, LocalDateTime ultimoLatido) {
+        private SesionPresencia(String username, String nombreCompleto, RolUsuario rol, String departamento,
+                String avatarUrl, LocalDateTime ultimoLatido) {
             this.username = username;
             this.nombreCompleto = nombreCompleto;
             this.rol = rol;
             this.departamento = departamento;
+            this.avatarUrl = avatarUrl;
             this.ultimoLatido = ultimoLatido;
         }
     }
@@ -67,9 +71,8 @@ public class PresenciaServiceImpl implements PresenciaService {
                         usuario.getNombreCompleto(),
                         usuario.getRol(),
                         usuario.getDepartamento(),
-                        ahora
-                )
-        );
+                        usuario.getAvatarUrl(),
+                        ahora));
     }
 
     @Override
@@ -79,7 +82,8 @@ public class PresenciaServiceImpl implements PresenciaService {
     }
 
     @Override
-    public PresenciaResumenResponse obtenerResumen(String usuarioSolicitante, RolUsuario rolSolicitante, String departamentoSolicitante) {
+    public PresenciaResumenResponse obtenerResumen(String usuarioSolicitante, RolUsuario rolSolicitante,
+            String departamentoSolicitante) {
         Usuario solicitante = cargarYValidarContexto(usuarioSolicitante, rolSolicitante, departamentoSolicitante);
 
         limpiarSesionesExpiradas();
@@ -93,11 +97,7 @@ public class PresenciaServiceImpl implements PresenciaService {
 
         String departamentoContexto = solicitante.getDepartamento();
 
-        List<PresenciaUsuarioResponse> visibles = solicitante.getRol().puedeAdministrar()
-                ? activos
-                : activos.stream()
-                        .filter(usuario -> mismoDepartamento(usuario.getDepartamento(), departamentoContexto))
-                        .toList();
+        List<PresenciaUsuarioResponse> visibles = activos;
 
         List<PresenciaUsuarioResponse> departamento = activos.stream()
                 .filter(usuario -> mismoDepartamento(usuario.getDepartamento(), departamentoContexto))
@@ -114,10 +114,7 @@ public class PresenciaServiceImpl implements PresenciaService {
                 .build();
     }
 
-    @Scheduled(
-            fixedDelayString = "${app.workflow.presencia.cleanup-fixed-delay-ms:60000}",
-            initialDelayString = "${app.workflow.presencia.cleanup-initial-delay-ms:15000}"
-    )
+    @Scheduled(fixedDelayString = "${app.workflow.presencia.cleanup-fixed-delay-ms:60000}", initialDelayString = "${app.workflow.presencia.cleanup-initial-delay-ms:15000}")
     public void limpiarSesionesExpiradasProgramado() {
         int removidas = limpiarSesionesExpiradas();
         if (removidas > 0) {
@@ -144,11 +141,13 @@ public class PresenciaServiceImpl implements PresenciaService {
                 .nombreCompleto(sesion.nombreCompleto)
                 .rol(sesion.rol)
                 .departamento(sesion.departamento)
+                .avatarUrl(sesion.avatarUrl)
                 .ultimoLatido(sesion.ultimoLatido)
                 .build();
     }
 
-    private Usuario cargarYValidarContexto(String usuarioContexto, RolUsuario rolContexto, String departamentoContexto) {
+    private Usuario cargarYValidarContexto(String usuarioContexto, RolUsuario rolContexto,
+            String departamentoContexto) {
         Usuario usuario = usuarioRepository.findByUsername(usuarioContexto)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario", "username", usuarioContexto));
 
@@ -160,7 +159,8 @@ public class PresenciaServiceImpl implements PresenciaService {
                 && departamentoContexto != null
                 && !departamentoContexto.isBlank()
                 && !mismoDepartamento(usuario.getDepartamento(), departamentoContexto)) {
-            throw new UnauthorizedActionException("El departamento del contexto no coincide con el usuario autenticado");
+            throw new UnauthorizedActionException(
+                    "El departamento del contexto no coincide con el usuario autenticado");
         }
 
         return usuario;

@@ -35,6 +35,7 @@ public class SolicitudResponse {
     private LocalDateTime fechaLimiteAtencion;
     private LocalDateTime fechaPrimeraAlertaSla;
     private LocalDateTime fechaEscalamientoSla;
+    private List<ArchivoAdjuntoResponse> archivosAdjuntos;
     private EstadoSla estadoSla;
     private Long minutosRestantesSla;
     private int totalEventos;

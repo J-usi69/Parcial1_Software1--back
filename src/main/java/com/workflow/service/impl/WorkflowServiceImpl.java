@@ -16,6 +16,7 @@ import com.workflow.mapper.SolicitudMapper;
 import com.workflow.repository.SolicitudWorkflowRepository;
 import com.workflow.repository.UsuarioRepository;
 import com.workflow.service.CodigoSeguimientoGenerator;
+import com.workflow.service.ArchivoStorageService;
 import com.workflow.service.WorkflowService;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +66,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     private final UsuarioRepository usuarioRepository;
     private final SolicitudMapper mapper;
     private final CodigoSeguimientoGenerator codigoGenerator;
+    private final ArchivoStorageService archivoStorageService;
 
     /**
      * Inicializa el generador de códigos con el último secuencial de la BD.
@@ -94,6 +96,11 @@ public class WorkflowServiceImpl implements WorkflowService {
 
     @Override
     public SolicitudResponse crearSolicitud(CrearSolicitudRequest request, String usuarioCreador, RolUsuario rolUsuario) {
+        return crearSolicitudConArchivos(request, null, usuarioCreador, rolUsuario);
+    }
+
+    @Override
+    public SolicitudResponse crearSolicitudConArchivos(CrearSolicitudRequest request, org.springframework.web.multipart.MultipartFile[] archivos, String usuarioCreador, RolUsuario rolUsuario) {
         // Validar que solo SOLICITANTE o ADMINISTRADOR pueden crear
         if (!rolUsuario.puedeCrearSolicitud()) {
             throw new UnauthorizedActionException(
@@ -112,17 +119,24 @@ public class WorkflowServiceImpl implements WorkflowService {
         solicitud.setPrioridad(prioridadSla);
         solicitud.setFechaLimiteAtencion(calcularFechaLimite(prioridadSla, LocalDateTime.now()));
 
+        // Almacenar archivos adjuntos si hay
+        if (archivos != null && archivos.length > 0) {
+            var adjuntos = archivoStorageService.almacenarArchivos(archivos, usuarioCreador);
+            solicitud.setArchivosAdjuntos(adjuntos);
+        }
+
         // Registrar evento de creación en el historial
         solicitud.registrarTransicion(
                 null,
                 EstadoWorkflow.PENDIENTE,
                 usuarioCreador,
                 rolUsuario.name(),
-                "Solicitud creada"
+                "Solicitud creada" + (archivos != null && archivos.length > 0 ? " con " + archivos.length + " archivo(s)" : "")
         );
 
         SolicitudWorkflow guardada = repository.save(solicitud);
-        log.info("Solicitud creada: {} por usuario: {}", codigo, usuarioCreador);
+        log.info("Solicitud creada: {} por usuario: {} con {} archivos", codigo, usuarioCreador,
+                archivos != null ? archivos.length : 0);
 
         return mapper.toResponse(guardada);
     }
@@ -211,6 +225,13 @@ public class WorkflowServiceImpl implements WorkflowService {
                     rol.name(),
                     "cambiar el estado de solicitudes"
             );
+        }
+
+        // Auto-asignación inteligente: Si un REVISOR toma un ticket PENDIENTE para pasarlo a EN_REVISION,
+        // automáticamente se adjudica como responsable, mejorando drásticamente el flujo operativo.
+        if (estadoActual == EstadoWorkflow.PENDIENTE && nuevoEstado == EstadoWorkflow.EN_REVISION && rol == RolUsuario.REVISOR) {
+            solicitud.setUsuarioAsignado(usuarioResponsable);
+            log.info("Ticket {} auto-asignado al revisor {} al iniciar la revisión.", id, usuarioResponsable);
         }
 
         // Registrar la transición atómicamente

@@ -28,4 +28,7 @@ public class AuthResponse {
 
     @Schema(description = "Departamento del usuario", example = "Sistemas")
     private String departamento;
+
+    @Schema(description = "URL del avatar del usuario", example = "https://ui-avatars.com/api/?name=Admin&background=random&bold=true&size=128")
+    private String avatarUrl;
 }

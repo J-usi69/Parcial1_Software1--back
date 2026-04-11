@@ -21,5 +21,6 @@ public class PresenciaUsuarioResponse {
     private String nombreCompleto;
     private RolUsuario rol;
     private String departamento;
+    private String avatarUrl;
     private LocalDateTime ultimoLatido;
 }

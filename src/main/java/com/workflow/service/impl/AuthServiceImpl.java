@@ -51,6 +51,7 @@ public class AuthServiceImpl implements AuthService {
                 .nombreCompleto(request.getNombreCompleto())
                 .rol(request.getRol())
                 .departamento(request.getDepartamento())
+                .avatarUrl(generarAvatarUrl(request.getNombreCompleto()))
                 .fechaCreacion(LocalDateTime.now())
                 .build();
                 
@@ -67,6 +68,15 @@ public class AuthServiceImpl implements AuthService {
                 .nombreCompleto(usuario.getNombreCompleto())
                 .rol(usuario.getRol())
                 .departamento(usuario.getDepartamento())
+                .avatarUrl(usuario.getAvatarUrl())
                 .build();
+    }
+
+    private String generarAvatarUrl(String nombreCompleto) {
+        if (nombreCompleto == null || nombreCompleto.isBlank()) {
+            return "https://ui-avatars.com/api/?name=U&background=334155&color=fff&bold=true&size=128";
+        }
+        String encoded = nombreCompleto.trim().replace(" ", "+");
+        return "https://ui-avatars.com/api/?name=" + encoded + "&background=random&color=fff&bold=true&size=128";
     }
 }
