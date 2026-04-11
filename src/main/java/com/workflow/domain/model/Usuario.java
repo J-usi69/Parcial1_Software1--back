@@ -33,6 +33,8 @@ public class Usuario {
 
     private String departamento;
 
+    private String avatarUrl;
+
     @CreatedDate
     private LocalDateTime fechaCreacion;
 }

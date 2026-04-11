@@ -45,7 +45,9 @@ public class ChatIAServiceImpl implements ChatIAService {
     private enum TipoAccionPendiente {
         CAMBIAR_ESTADO,
         REASIGNAR_DEPARTAMENTO,
-        ASIGNAR_USUARIO
+        ASIGNAR_USUARIO,
+        LIBERAR_CARGA,
+        ESCALAR_URGENTES
     }
 
     private static final class PendingAction {
@@ -202,11 +204,11 @@ public class ChatIAServiceImpl implements ChatIAService {
         }
 
         try {
-            SolicitudResponse ejecutada = ejecutarAccionPendiente(pendiente, usuario, rolUsuario, departamentoUsuario);
+            String resultado = ejecutarAccionPendiente(pendiente, usuario, rolUsuario, departamentoUsuario);
             accionesPendientes.remove(usuario);
 
             return Optional.of(construirRespuesta(
-                    "Accion ejecutada con exito: " + pendiente.resumen + "\nResultado: " + lineaSolicitud(ejecutada),
+                    "Acción ejecutada con éxito:\n" + pendiente.resumen + "\n\nResultado:\n" + resultado,
                     "ACCION_EJECUTADA"
             ));
         } catch (RuntimeException ex) {
@@ -241,25 +243,19 @@ public class ChatIAServiceImpl implements ChatIAService {
         }
 
         Optional<ChatIAResponse> cambioEstado = prepararAccionCambioEstado(
-                usuario,
-                rolUsuario,
-                departamentoUsuario,
-                mensajeOriginal,
-                mensajeNormalizado,
-                codigoDetectado
+                usuario, rolUsuario, departamentoUsuario, mensajeOriginal, mensajeNormalizado, codigoDetectado
         );
-        if (cambioEstado.isPresent()) {
-            return cambioEstado;
-        }
+        if (cambioEstado.isPresent()) return cambioEstado;
 
-        return prepararAccionAsignacion(
-                usuario,
-                rolUsuario,
-                departamentoUsuario,
-                mensajeOriginal,
-                mensajeNormalizado,
-                codigoDetectado
+        Optional<ChatIAResponse> asignacion = prepararAccionAsignacion(
+                usuario, rolUsuario, departamentoUsuario, mensajeOriginal, mensajeNormalizado, codigoDetectado
         );
+        if (asignacion.isPresent()) return asignacion;
+
+        Optional<ChatIAResponse> liberarCarga = prepararAccionLiberarCarga(usuario, rolUsuario, departamentoUsuario, mensajeNormalizado);
+        if (liberarCarga.isPresent()) return liberarCarga;
+
+        return prepararAccionEscalarUrgentes(usuario, rolUsuario, departamentoUsuario, mensajeNormalizado);
     }
 
     private Optional<ChatIAResponse> prepararAccionCambioEstado(
@@ -509,7 +505,35 @@ public class ChatIAServiceImpl implements ChatIAService {
         return Optional.of(registrarAccionPendiente(usuario, pendiente, "ACCION_PENDIENTE_ASIGNACION"));
     }
 
-    private SolicitudResponse ejecutarAccionPendiente(
+    private Optional<ChatIAResponse> prepararAccionLiberarCarga(String usuario, RolUsuario rol, String depto, String msj) {
+        if (!contieneAlguno(msj, "agotado", "mucho trabajo", "liberar carga", "balancear", "desasignar", "desvincular me")) return Optional.empty();
+        if (!rol.puedeRevisar()) {
+            return Optional.of(construirRespuesta("Los solicitantes no gestionan colas de trabajo masivas.", "ACCION_NO_PERMITIDA"));
+        }
+        PendingAction pendiente = new PendingAction(
+                TipoAccionPendiente.LIBERAR_CARGA,
+                null, null, null, null, null, null,
+                rol, depto, LocalDateTime.now(),
+                "Liberar casos operativos actualmente asignados a tu nombre hacia la bóveda general del departamento."
+        );
+        return Optional.of(registrarAccionPendiente(usuario, pendiente, "ACCION_PENDIENTE_LIBERAR_CARGA"));
+    }
+
+    private Optional<ChatIAResponse> prepararAccionEscalarUrgentes(String usuario, RolUsuario rol, String depto, String msj) {
+        if (!contieneAlguno(msj, "escalar urgente", "escalar critico", "prioridades a admin")) return Optional.empty();
+        if (rol != RolUsuario.ADMINISTRADOR && rol != RolUsuario.REVISOR) {
+            return Optional.of(construirRespuesta("No puedes escalar casos libremente.", "ACCION_NO_PERMITIDA"));
+        }
+        PendingAction pendiente = new PendingAction(
+                TipoAccionPendiente.ESCALAR_URGENTES,
+                null, null, null, null, null, null,
+                rol, depto, LocalDateTime.now(),
+                "Escalar obligatoriamente TODAS las solicitudes URGENTES (fuera de control) hacia el enclave técnico (Sistemas)."
+        );
+        return Optional.of(registrarAccionPendiente(usuario, pendiente, "ACCION_PENDIENTE_ESCALAR_URGENTES"));
+    }
+
+    private String ejecutarAccionPendiente(
             PendingAction pendiente,
             String usuario,
             RolUsuario rolUsuario,
@@ -519,35 +543,49 @@ public class ChatIAServiceImpl implements ChatIAService {
             case CAMBIAR_ESTADO -> {
                 CambiarEstadoRequest request = CambiarEstadoRequest.builder()
                         .nuevoEstado(pendiente.nuevoEstado)
-                        .comentario(pendiente.comentario != null ? pendiente.comentario : "Accion ejecutada desde asistente IA")
+                        .comentario(pendiente.comentario != null ? pendiente.comentario : "Acción ejecutada desde Inteligencia IA.")
                         .build();
-                yield workflowService.cambiarEstado(
-                        pendiente.solicitudId,
-                        request,
-                        usuario,
-                        rolUsuario,
-                        departamentoUsuario
-                );
+                yield lineaSolicitud(workflowService.cambiarEstado(pendiente.solicitudId, request, usuario, rolUsuario, departamentoUsuario));
             }
             case REASIGNAR_DEPARTAMENTO -> {
                 ReasignarDepartamentoRequest request = ReasignarDepartamentoRequest.builder()
                         .nuevoDepartamento(pendiente.nuevoDepartamento)
-                        .comentario(pendiente.comentario != null ? pendiente.comentario : "Reasignacion ejecutada desde asistente IA")
+                        .comentario(pendiente.comentario != null ? pendiente.comentario : "Desvío automático programado por IA.")
                         .build();
-                yield workflowService.reasignarDepartamento(
-                        pendiente.solicitudId,
-                        request,
-                        usuario,
-                        rolUsuario,
-                        departamentoUsuario
-                );
+                yield lineaSolicitud(workflowService.reasignarDepartamento(pendiente.solicitudId, request, usuario, rolUsuario, departamentoUsuario));
             }
-            case ASIGNAR_USUARIO -> workflowService.asignarUsuario(
-                    pendiente.solicitudId,
-                    pendiente.usuarioAsignado,
-                    usuario,
-                    rolUsuario
-            );
+            case ASIGNAR_USUARIO -> {
+                yield lineaSolicitud(workflowService.asignarUsuario(pendiente.solicitudId, pendiente.usuarioAsignado, usuario, rolUsuario));
+            }
+            case LIBERAR_CARGA -> {
+                List<SolicitudResponse> asignadas = workflowService.listarPorDepartamento(departamentoUsuario).stream()
+                    .filter(s -> (s.getEstado() == EstadoWorkflow.PENDIENTE || s.getEstado() == EstadoWorkflow.EN_REVISION) && usuario.equalsIgnoreCase(s.getUsuarioAsignado()))
+                    .toList();
+                for (SolicitudResponse s : asignadas) {
+                    workflowService.asignarUsuario(s.getId(), null, usuario, rolUsuario);
+                }
+                yield "Se han desasignado **" + asignadas.size() + "** solicitudes operativas que residían en tu bóveda. Volvieron al Pool general del departamento.";
+            }
+            case ESCALAR_URGENTES -> {
+                List<SolicitudResponse> urgentes = workflowService.listarTodas().stream()
+                    .filter(s -> (s.getEstado() == EstadoWorkflow.PENDIENTE || s.getEstado() == EstadoWorkflow.EN_REVISION) 
+                              && s.getPrioridad() == Prioridad.URGENTE
+                              && (s.getDepartamentoActual() == null || !s.getDepartamentoActual().equalsIgnoreCase("Sistemas")))
+                    .toList();
+                    
+                if (urgentes.isEmpty()) {
+                    yield "El sistema técnico informa que todas las solicitudes urgentes vitales YA están siendo atendidas por el departamento de Sistemas. Ninguna contingencia necesaria.";
+                }
+
+                for (SolicitudResponse s : urgentes) {
+                    ReasignarDepartamentoRequest request = ReasignarDepartamentoRequest.builder()
+                        .nuevoDepartamento("Sistemas")
+                        .comentario("Escalado automático URGENTE por contingencia analítica.")
+                        .build();
+                    workflowService.reasignarDepartamento(s.getId(), request, usuario, RolUsuario.ADMINISTRADOR, "Sistemas");
+                }
+                yield "Se han transferido exitosamente **" + urgentes.size() + "** solicitudes críticas extraviadas hacia Sistemas para atención de contingencia obligatoria.";
+            }
         };
     }
 
@@ -714,7 +752,7 @@ public class ChatIAServiceImpl implements ChatIAService {
         List<SolicitudResponse> solicitudes = workflowService.listarPorUsuarioCreador(usuario);
         if (solicitudes.isEmpty()) {
             return construirRespuesta(
-                    "No tienes solicitudes registradas por ahora.",
+                    "No tienes flujos de trabajo generados a tu nombre. ¿Te ayudo a crear el primero?",
                     "RESUMEN_SOLICITANTE_VACIO"
             );
         }
@@ -723,21 +761,22 @@ public class ChatIAServiceImpl implements ChatIAService {
         List<SolicitudResponse> recientes = solicitudes.stream().limit(3).toList();
 
         StringBuilder respuesta = new StringBuilder();
-        respuesta.append("Resumen de tus solicitudes: ").append(solicitudes.size()).append(" en total. ");
+        respuesta.append("He revisado tu historial. Tienes un total de **").append(solicitudes.size()).append("** solicitudes activas o procesadas.\n\n");
         respuesta.append(resumenConteos(conteo));
-        respuesta.append("\nUltimas solicitudes:");
+        respuesta.append("\n\nTus últimas iteraciones con el sistema fueron:\n");
         for (SolicitudResponse solicitud : recientes) {
-            respuesta.append("\n").append(lineaSolicitud(solicitud));
+            respuesta.append(lineaSolicitud(solicitud)).append("\n");
         }
 
-        return construirRespuesta(respuesta.toString(), "RESUMEN_SOLICITANTE");
+        return construirRespuesta(respuesta.toString().trim(), "RESUMEN_SOLICITANTE");
     }
 
     private ChatIAResponse responderResumenRevisor(String departamentoUsuario) {
         List<SolicitudResponse> solicitudes = workflowService.listarPorDepartamento(departamentoUsuario);
         Map<EstadoWorkflow, Long> conteo = contarPorEstado(solicitudes);
 
-        String respuesta = "Resumen de " + departamentoUsuario + ": " + solicitudes.size() + " solicitudes visibles. "
+        String respuesta = "Análisis completo de carga para el departamento **" + departamentoUsuario + "** concluido.\n"
+                + "Contabilizo **" + solicitudes.size() + "** flujos en su ecosistema actualmente.\n\n"
                 + resumenConteos(conteo);
 
         return construirRespuesta(respuesta, "RESUMEN_REVISOR");
@@ -747,7 +786,8 @@ public class ChatIAServiceImpl implements ChatIAService {
         List<SolicitudResponse> solicitudes = workflowService.listarTodas();
         Map<EstadoWorkflow, Long> conteo = contarPorEstado(solicitudes);
 
-        String respuesta = "Resumen global: " + solicitudes.size() + " solicitudes en sistema. "
+        String respuesta = "Visión satelital del sistema obtenida con éxito.\n"
+                + "Existen **" + solicitudes.size() + "** flujos en todo el ciclo de vida de la empresa interactuando en tiempo real.\n\n"
                 + resumenConteos(conteo);
 
         return construirRespuesta(respuesta, "RESUMEN_ADMIN");
@@ -766,8 +806,8 @@ public class ChatIAServiceImpl implements ChatIAService {
             }
         }
 
-        String respuesta = "Cuello de botella actual: " + mayorEstado.name() + " con " + mayorCantidad
-                + " solicitudes. " + resumenConteos(conteo);
+        String respuesta = "He detectado una agrupación masiva en la fase de **" + mayorEstado.name() + "** con " + mayorCantidad
+                + " solicitudes estancadas o en proceso constructivo.\n\n" + resumenConteos(conteo);
 
         return construirRespuesta(respuesta, "CUELLO_BOTELLA_ADMIN");
     }
@@ -785,17 +825,17 @@ public class ChatIAServiceImpl implements ChatIAService {
 
         if (candidatas.isEmpty()) {
             return construirRespuesta(
-                    "No hay backlog operativo en PENDIENTE o EN_REVISION.",
+                    "Tus medidores están limpios. No tienes retrasos operativos masivos ahora mismo en el flujo.",
                     "BACKLOG_VACIO"
             );
         }
 
-        StringBuilder respuesta = new StringBuilder("Top backlog sugerido por prioridad:");
+        StringBuilder respuesta = new StringBuilder("De acuerdo a mi algoritmo de prioridades y estancamiento, recomiendo intervención inmediata en estas tareas:\n");
         for (SolicitudResponse solicitud : candidatas) {
-            respuesta.append("\n").append(lineaSolicitud(solicitud));
+            respuesta.append(lineaSolicitud(solicitud)).append("\n");
         }
 
-        return construirRespuesta(respuesta.toString(), "BACKLOG_ADMIN");
+        return construirRespuesta(respuesta.toString().trim(), "BACKLOG_ADMIN");
     }
 
     private ChatIAResponse responderColaRevisor(String departamentoUsuario) {
@@ -810,36 +850,38 @@ public class ChatIAServiceImpl implements ChatIAService {
 
         if (cola.isEmpty()) {
             return construirRespuesta(
-                    "No tienes casos operativos pendientes en " + departamentoUsuario + ".",
+                    "El análisis indica que tu equipo no tiene casos operativos ni bloqueos pendientes en **" + departamentoUsuario + "**.",
                     "COLA_REVISOR_VACIA"
             );
         }
 
         StringBuilder respuesta = new StringBuilder();
         SolicitudResponse siguiente = cola.get(0);
-        respuesta.append("Siguiente caso sugerido: ").append(lineaSolicitud(siguiente));
-        respuesta.append("\nCola operativa (top 5):");
+        respuesta.append("He analizado la cola. Te sugiero darle alta prioridad al siguiente caso:\n").append(lineaSolicitud(siguiente));
+        
+        if (cola.size() > 1) {
+            respuesta.append("\n\nEl resto de la carga de tu equipo se distribuye así (Top 5 preventivo):\n");
+            cola.stream().limit(5).forEach(s -> respuesta.append(lineaSolicitud(s)).append("\n"));
+        }
 
-        cola.stream().limit(5).forEach(s -> respuesta.append("\n").append(lineaSolicitud(s)));
-
-        return construirRespuesta(respuesta.toString(), "COLA_REVISOR");
+        return construirRespuesta(respuesta.toString().trim(), "COLA_REVISOR");
     }
 
     private ChatIAResponse responderRecientesContextuales(String usuario, RolUsuario rolUsuario, String departamentoUsuario) {
         List<SolicitudResponse> solicitudes = obtenerSolicitudesContextuales(usuario, rolUsuario, departamentoUsuario);
 
         if (solicitudes.isEmpty()) {
-            return construirRespuesta("No hay solicitudes para mostrar en tu contexto actual.", "SIN_DATOS_CONTEXTUALES");
+            return construirRespuesta("Mis sensores no detectan solicitudes recientes en tu radar actual.", "SIN_DATOS_CONTEXTUALES");
         }
 
         List<SolicitudResponse> recientes = solicitudes.stream().limit(5).toList();
 
-        StringBuilder respuesta = new StringBuilder("Solicitudes recientes:");
+        StringBuilder respuesta = new StringBuilder("Las alteraciones más recientes en el flujo de trabajo bajo tu jurisdicción son:\n\n");
         for (SolicitudResponse solicitud : recientes) {
-            respuesta.append("\n").append(lineaSolicitud(solicitud));
+            respuesta.append(lineaSolicitud(solicitud)).append("\n");
         }
 
-        return construirRespuesta(respuesta.toString(), "LISTADO_RECIENTES");
+        return construirRespuesta(respuesta.toString().trim(), "LISTADO_RECIENTES");
     }
 
     private ChatIAResponse responderListadoPorEstado(
@@ -857,17 +899,17 @@ public class ChatIAServiceImpl implements ChatIAService {
 
         if (filtradas.isEmpty()) {
             return construirRespuesta(
-                    "No hay solicitudes en estado " + estado.name() + " dentro de tu alcance.",
+                    "El filtro para el estado **" + estado.name() + "** no devolvió resultados en tu alcance operativo actual.",
                     "LISTADO_ESTADO_VACIO"
             );
         }
 
-        StringBuilder respuesta = new StringBuilder("Solicitudes en ").append(estado.name()).append(" (top 5):");
+        StringBuilder respuesta = new StringBuilder("He extraído los casos que actualmente residen en la fase de **").append(estado.name()).append("** (Mostrando 5):\n\n");
         for (SolicitudResponse solicitud : filtradas) {
-            respuesta.append("\n").append(lineaSolicitud(solicitud));
+            respuesta.append(lineaSolicitud(solicitud)).append("\n");
         }
 
-        return construirRespuesta(respuesta.toString(), "LISTADO_POR_ESTADO");
+        return construirRespuesta(respuesta.toString().trim(), "LISTADO_POR_ESTADO");
     }
 
     private ChatIAResponse responderDetallePorCodigo(
@@ -990,17 +1032,17 @@ public class ChatIAServiceImpl implements ChatIAService {
     }
 
     private String resumenConteos(Map<EstadoWorkflow, Long> conteo) {
-        return "PENDIENTE=" + conteo.getOrDefault(EstadoWorkflow.PENDIENTE, 0L)
-                + ", EN_REVISION=" + conteo.getOrDefault(EstadoWorkflow.EN_REVISION, 0L)
-                + ", APROBADO=" + conteo.getOrDefault(EstadoWorkflow.APROBADO, 0L)
-                + ", RECHAZADO=" + conteo.getOrDefault(EstadoWorkflow.RECHAZADO, 0L) + ".";
+        return "Actualmente registramos **" + conteo.getOrDefault(EstadoWorkflow.PENDIENTE, 0L) + "** casos en cola inicial, "
+                + "**" + conteo.getOrDefault(EstadoWorkflow.EN_REVISION, 0L) + "** siendo evaluados por los departamentos, "
+                + "**" + conteo.getOrDefault(EstadoWorkflow.APROBADO, 0L) + "** exitosamente finalizados y "
+                + "**" + conteo.getOrDefault(EstadoWorkflow.RECHAZADO, 0L) + "** declinados.";
     }
 
     private String lineaSolicitud(SolicitudResponse solicitud) {
         return "- " + valor(solicitud.getCodigoSeguimiento())
                 + " | " + valor(solicitud.getEstado())
                 + " | " + valor(solicitud.getPrioridad())
-                + " | " + truncar(valor(solicitud.getTitulo()), 52);
+                + " | " + truncar(valor(solicitud.getTitulo()), 60);
     }
 
     private String truncar(String texto, int maxLen) {

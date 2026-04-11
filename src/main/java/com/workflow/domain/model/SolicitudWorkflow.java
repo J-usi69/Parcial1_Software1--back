@@ -60,6 +60,9 @@ public class SolicitudWorkflow {
     @Builder.Default
     private List<EventoHistorial> historial = new ArrayList<>();
 
+    @Builder.Default
+    private List<ArchivoAdjunto> archivosAdjuntos = new ArrayList<>();
+
     @CreatedDate
     private LocalDateTime fechaCreacion;
 

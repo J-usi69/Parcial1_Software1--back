@@ -24,6 +24,11 @@ public interface WorkflowService {
     SolicitudResponse crearSolicitud(CrearSolicitudRequest request, String usuarioCreador, RolUsuario rolUsuario);
 
     /**
+     * Crea una nueva solicitud con archivos adjuntos.
+     */
+    SolicitudResponse crearSolicitudConArchivos(CrearSolicitudRequest request, org.springframework.web.multipart.MultipartFile[] archivos, String usuarioCreador, RolUsuario rolUsuario);
+
+    /**
      * Obtiene una solicitud por su ID.
      */
     SolicitudResponse obtenerPorId(String id);

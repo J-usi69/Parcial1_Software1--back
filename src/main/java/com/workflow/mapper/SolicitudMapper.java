@@ -3,9 +3,11 @@ package com.workflow.mapper;
 import com.workflow.domain.enums.EstadoSla;
 import com.workflow.domain.enums.EstadoWorkflow;
 import com.workflow.domain.enums.Prioridad;
+import com.workflow.domain.model.ArchivoAdjunto;
 import com.workflow.domain.model.EventoHistorial;
 import com.workflow.domain.model.SolicitudWorkflow;
 import com.workflow.dto.request.CrearSolicitudRequest;
+import com.workflow.dto.response.ArchivoAdjuntoResponse;
 import com.workflow.dto.response.EventoHistorialResponse;
 import com.workflow.dto.response.SolicitudResponse;
 import org.springframework.stereotype.Component;
@@ -51,6 +53,12 @@ public class SolicitudMapper {
         EstadoSla estadoSla = calcularEstadoSla(solicitud.getEstado(), fechaLimiteSla);
         Long minutosRestantes = calcularMinutosRestantes(estadoSla, fechaLimiteSla);
 
+        List<ArchivoAdjuntoResponse> archivosResponse = solicitud.getArchivosAdjuntos() != null
+                ? solicitud.getArchivosAdjuntos().stream()
+                    .map(this::toArchivoResponse)
+                    .collect(Collectors.toList())
+                : Collections.emptyList();
+
         return SolicitudResponse.builder()
                 .id(solicitud.getId())
                 .codigoSeguimiento(solicitud.getCodigoSeguimiento())
@@ -62,6 +70,7 @@ public class SolicitudMapper {
                 .usuarioCreador(solicitud.getUsuarioCreador())
                 .usuarioAsignado(solicitud.getUsuarioAsignado())
                 .historial(historialResponse)
+                .archivosAdjuntos(archivosResponse)
                 .fechaCreacion(solicitud.getFechaCreacion())
                 .fechaActualizacion(solicitud.getFechaActualizacion())
                 .fechaLimiteAtencion(fechaLimiteSla)
@@ -96,6 +105,22 @@ public class SolicitudMapper {
                 .usuarioResponsable(evento.getUsuarioResponsable())
                 .rolUsuario(evento.getRolUsuario())
                 .comentario(evento.getComentario())
+                .build();
+    }
+
+    /**
+     * Convierte un ArchivoAdjunto a su DTO de respuesta.
+     */
+    public ArchivoAdjuntoResponse toArchivoResponse(ArchivoAdjunto archivo) {
+        if (archivo == null) return null;
+
+        return ArchivoAdjuntoResponse.builder()
+                .id(archivo.getId())
+                .nombreOriginal(archivo.getNombreOriginal())
+                .tipoContenido(archivo.getTipoContenido())
+                .tamanoBytes(archivo.getTamanoBytes())
+                .subidoPor(archivo.getSubidoPor())
+                .fechaSubida(archivo.getFechaSubida())
                 .build();
     }
 

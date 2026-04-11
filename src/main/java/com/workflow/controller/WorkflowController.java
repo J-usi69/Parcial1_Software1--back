@@ -51,6 +51,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class WorkflowController {
 
     private final WorkflowService workflowService;
+    private final com.workflow.service.ArchivoStorageService archivoStorageService;
 
     // ═══════════════════════════════════════════════════════════════
     //  CREAR
@@ -58,10 +59,11 @@ public class WorkflowController {
 
     /**
      * Crea una nueva solicitud de workflow.
+     * Acepta JSON body + archivos opcionales como multipart.
      * Actor: SOLICITANTE
      */
     @PostMapping
-    @Operation(summary = "Crear nueva solicitud", description = "Permite a un SOLICITANTE iniciar un nuevo trámite/solicitud en un departamento específico.")
+    @Operation(summary = "Crear nueva solicitud (JSON)", description = "Permite a un SOLICITANTE iniciar un nuevo trámite/solicitud en un departamento específico.")
     public ResponseEntity<ApiResponse<SolicitudResponse>> crearSolicitud(
             @Valid @RequestBody CrearSolicitudRequest request,
                         @RequestHeader(value = "X-Usuario", required = false) String usuarioCreador,
@@ -75,6 +77,31 @@ public class WorkflowController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Solicitud creada exitosamente", response));
+    }
+
+    /**
+     * Crea una nueva solicitud con archivos adjuntos (multipart).
+     * El JSON de la solicitud se envía en el part "solicitud" y los archivos en "archivos".
+     */
+    @PostMapping(value = "/con-archivos", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Crear solicitud con archivos", description = "Crea solicitud con archivos adjuntos. El JSON va en part 'solicitud', los archivos en part 'archivos'.")
+    public ResponseEntity<ApiResponse<SolicitudResponse>> crearSolicitudConArchivos(
+            @RequestPart("solicitud") @Valid CrearSolicitudRequest request,
+            @RequestPart(value = "archivos", required = false) org.springframework.web.multipart.MultipartFile[] archivos,
+            @RequestHeader(value = "X-Usuario", required = false) String usuarioCreador,
+            @RequestHeader(value = "X-Rol", required = false) RolUsuario rolUsuario) {
+
+        validarContextoBasico(usuarioCreador, rolUsuario);
+
+        log.info("POST /api/v1/workflows/con-archivos - Creando solicitud: '{}' con {} archivos",
+                request.getTitulo(), archivos != null ? archivos.length : 0);
+
+        SolicitudResponse response = workflowService.crearSolicitudConArchivos(
+                request, archivos, usuarioCreador, rolUsuario);
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Solicitud creada exitosamente con archivos", response));
     }
 
     // ═══════════════════════════════════════════════════════════════

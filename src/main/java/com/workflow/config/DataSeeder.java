@@ -130,12 +130,16 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private Usuario buildDefaultUser(String username, String password, String nombre, RolUsuario rol, String depto) {
+        String encoded = nombre.trim().replace(" ", "+");
+        String avatarUrl = "https://ui-avatars.com/api/?name=" + encoded + "&background=random&color=fff&bold=true&size=128";
+
         return Usuario.builder()
             .username(username)
             .password(password)
             .nombreCompleto(nombre)
             .rol(rol)
             .departamento(depto)
+            .avatarUrl(avatarUrl)
             .fechaCreacion(LocalDateTime.now())
             .build();
     }
