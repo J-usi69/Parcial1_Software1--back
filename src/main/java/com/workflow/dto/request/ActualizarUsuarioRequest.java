@@ -29,4 +29,7 @@ public class ActualizarUsuarioRequest {
 
     @Schema(description = "Contraseña nueva opcional. Si se omite, se conserva la actual", example = "nueva-clave")
     private String password;
+
+    @Schema(description = "URL de la foto de perfil", example = "https://example.com/avatar.png")
+    private String avatarUrl;
 }

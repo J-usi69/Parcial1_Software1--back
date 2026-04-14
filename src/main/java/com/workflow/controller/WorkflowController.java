@@ -18,6 +18,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -460,6 +461,50 @@ public class WorkflowController {
                 }
 
         return ResponseEntity.ok(ApiResponse.ok("Estadísticas del workflow", stats));
+    }
+
+    /**
+     * Endpoint optimizado para mapeo de Nodos en diagrama tipo Kanban/Swimlanes
+     */
+    @GetMapping("/diagrama/calles")
+    @Operation(summary = "Obtener Calles (Swimlanes)", description = "Agrupa todas las tareas (nodos) por departamento para inyectar directamente en el JointJS de Frontend.")
+    public ResponseEntity<ApiResponse<Map<String, List<SolicitudResponse>>>> obtenerDiagramaCalles(
+            @RequestHeader(value = "X-Usuario", required = false) String usuario,
+            @RequestHeader(value = "X-Rol", required = false) RolUsuario rolUsuario,
+            @RequestHeader(value = "X-Departamento", required = false) String departamentoUsuario) {
+
+        validarContextoConDepartamentoSiRevisor(usuario, rolUsuario, departamentoUsuario);
+
+        Map<String, List<SolicitudResponse>> diagrama = workflowService.obtenerDiagramaCalles();
+        
+                // Return only the allowed scope based on role logic
+        if (rolUsuario == RolUsuario.REVISOR) {
+                        String claveDepartamento = diagrama.keySet().stream()
+                                        .filter(dep -> dep.equalsIgnoreCase(departamentoUsuario))
+                                        .findFirst()
+                                        .orElse(departamentoUsuario);
+
+                        Map<String, List<SolicitudResponse>> filtered = new LinkedHashMap<>();
+                        filtered.put(claveDepartamento, diagrama.getOrDefault(claveDepartamento, List.of()));
+            return ResponseEntity.ok(ApiResponse.ok("Calles del diagrama para el departamento", filtered));
+        }
+
+                if (rolUsuario == RolUsuario.SOLICITANTE) {
+                        Map<String, List<SolicitudResponse>> filtered = new LinkedHashMap<>();
+
+                        for (String departamento : workflowService.obtenerCatalogoDepartamentos()) {
+                                List<SolicitudResponse> visibles = diagrama.getOrDefault(departamento, List.of())
+                                                .stream()
+                                                .filter(s -> s.getUsuarioCreador() != null
+                                                                && s.getUsuarioCreador().equalsIgnoreCase(usuario))
+                                                .collect(Collectors.toList());
+                                filtered.put(departamento, visibles);
+                        }
+
+                        return ResponseEntity.ok(ApiResponse.ok("Calles del diagrama para el solicitante", filtered));
+                }
+
+        return ResponseEntity.ok(ApiResponse.ok("Estructura de calles del diagrama", diagrama));
     }
 
         private void validarContextoBasico(String usuario, RolUsuario rolUsuario) {

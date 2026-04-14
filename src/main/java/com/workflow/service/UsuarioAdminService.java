@@ -16,5 +16,7 @@ public interface UsuarioAdminService {
 
     UsuarioAdminResponse actualizarUsuario(String id, ActualizarUsuarioRequest request);
 
+    UsuarioAdminResponse actualizarAvatar(String id, String avatarUrl);
+
     void eliminarUsuario(String id);
 }

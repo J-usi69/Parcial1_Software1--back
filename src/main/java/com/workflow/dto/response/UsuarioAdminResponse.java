@@ -33,4 +33,7 @@ public class UsuarioAdminResponse {
 
     @Schema(description = "Fecha de creación")
     private LocalDateTime fechaCreacion;
+
+    @Schema(description = "URL de la foto de perfil")
+    private String avatarUrl;
 }

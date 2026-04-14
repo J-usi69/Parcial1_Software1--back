@@ -15,6 +15,7 @@ import com.workflow.exception.UnauthorizedActionException;
 import com.workflow.mapper.SolicitudMapper;
 import com.workflow.repository.SolicitudWorkflowRepository;
 import com.workflow.repository.UsuarioRepository;
+import com.workflow.repository.DepartamentoRepository;
 import com.workflow.service.CodigoSeguimientoGenerator;
 import com.workflow.service.ArchivoStorageService;
 import com.workflow.service.WorkflowService;
@@ -49,11 +50,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class WorkflowServiceImpl implements WorkflowService {
 
-    private static final List<String> DEPARTAMENTOS_VALIDOS = List.of(
-            "Sistemas",
-            "Ventas",
-            "Recursos Humanos"
-    );
+    // NOTE: Departments are now managed dynamically via DepartamentoRepository
 
     private static final Map<Prioridad, Long> SLA_HORAS_POR_PRIORIDAD = Map.of(
             Prioridad.URGENTE, 4L,
@@ -64,6 +61,7 @@ public class WorkflowServiceImpl implements WorkflowService {
 
     private final SolicitudWorkflowRepository repository;
     private final UsuarioRepository usuarioRepository;
+    private final DepartamentoRepository departamentoRepository;
     private final SolicitudMapper mapper;
     private final CodigoSeguimientoGenerator codigoGenerator;
     private final ArchivoStorageService archivoStorageService;
@@ -307,7 +305,12 @@ public class WorkflowServiceImpl implements WorkflowService {
 
     @Override
     public List<String> obtenerCatalogoDepartamentos() {
-        return DEPARTAMENTOS_VALIDOS;
+        List<String> fromDb = departamentoRepository.findAllByActivoTrueOrderByNombreAsc()
+                .stream()
+                .map(com.workflow.domain.model.Departamento::getNombre)
+                .collect(Collectors.toList());
+        // Fallback in case the collection is empty
+        return fromDb.isEmpty() ? List.of("Sistemas", "Ventas", "Recursos Humanos") : fromDb;
     }
 
     @Override
@@ -315,8 +318,10 @@ public class WorkflowServiceImpl implements WorkflowService {
         SolicitudWorkflow solicitud = buscarSolicitudPorId(id);
         String departamentoActual = solicitud.getDepartamentoActual();
 
+        List<String> departamentosValidos = obtenerCatalogoDepartamentos();
+
         Map<String, Long> colaPendiente = new LinkedHashMap<>();
-        for (String departamento : DEPARTAMENTOS_VALIDOS) {
+        for (String departamento : departamentosValidos) {
             long cantidad = repository.countByDepartamentoActualIgnoreCaseAndEstado(
                     departamento,
                     EstadoWorkflow.PENDIENTE
@@ -324,7 +329,7 @@ public class WorkflowServiceImpl implements WorkflowService {
             colaPendiente.put(departamento, cantidad);
         }
 
-        String departamentoSugerido = DEPARTAMENTOS_VALIDOS.stream()
+        String departamentoSugerido = departamentosValidos.stream()
                 .filter(dep -> departamentoActual == null || !dep.equalsIgnoreCase(departamentoActual))
                 .min(Comparator.comparingLong(dep -> colaPendiente.getOrDefault(dep, 0L)))
                 .orElse(null);
@@ -333,7 +338,7 @@ public class WorkflowServiceImpl implements WorkflowService {
         recomendacion.put("departamentoActual", departamentoActual);
         recomendacion.put("departamentoSugerido", departamentoSugerido);
         recomendacion.put("colaPendiente", colaPendiente);
-        recomendacion.put("departamentosDisponibles", DEPARTAMENTOS_VALIDOS);
+        recomendacion.put("departamentosDisponibles", departamentosValidos);
 
         return recomendacion;
     }
@@ -383,45 +388,77 @@ public class WorkflowServiceImpl implements WorkflowService {
 
     @Override
     public Map<String, Object> obtenerEstadisticas() {
-        Map<String, Object> stats = new HashMap<>();
         List<SolicitudWorkflow> solicitudes = repository.findAll();
-
+        Map<String, Object> stats = new HashMap<>();
         stats.put("totalSolicitudes", solicitudes.size());
 
-        Map<String, Long> porEstado = new HashMap<>();
+        Map<EstadoWorkflow, Long> conteoEstado = new EnumMap<>(EstadoWorkflow.class);
         for (EstadoWorkflow estado : EstadoWorkflow.values()) {
-            porEstado.put(estado.name(), repository.countByEstado(estado));
+            conteoEstado.put(estado, 0L);
         }
-        stats.put("porEstado", porEstado);
 
-        Map<String, Long> porSla = new LinkedHashMap<>();
         Map<EstadoSla, Long> conteoSla = new EnumMap<>(EstadoSla.class);
         for (EstadoSla estadoSla : EstadoSla.values()) {
             conteoSla.put(estadoSla, 0L);
         }
 
+        long totalAlertasSla = 0L;
+        long totalEscaladasSla = 0L;
         LocalDateTime ahora = LocalDateTime.now();
+
         for (SolicitudWorkflow solicitud : solicitudes) {
+            EstadoWorkflow estado = solicitud.getEstado();
+            if (estado != null) {
+                conteoEstado.put(estado, conteoEstado.getOrDefault(estado, 0L) + 1);
+            }
+
             EstadoSla estadoSla = calcularEstadoSla(solicitud, ahora);
-            conteoSla.put(estadoSla, conteoSla.get(estadoSla) + 1);
+            conteoSla.put(estadoSla, conteoSla.getOrDefault(estadoSla, 0L) + 1);
+
+            if (solicitud.getFechaPrimeraAlertaSla() != null) {
+                totalAlertasSla++;
+            }
+            if (solicitud.getFechaEscalamientoSla() != null) {
+                totalEscaladasSla++;
+            }
         }
 
+        Map<String, Long> porEstado = new LinkedHashMap<>();
+        for (EstadoWorkflow estado : EstadoWorkflow.values()) {
+            porEstado.put(estado.name(), conteoEstado.getOrDefault(estado, 0L));
+        }
+        stats.put("porEstado", porEstado);
+
+        Map<String, Long> porSla = new LinkedHashMap<>();
         for (EstadoSla estadoSla : EstadoSla.values()) {
-            porSla.put(estadoSla.name(), conteoSla.get(estadoSla));
+            porSla.put(estadoSla.name(), conteoSla.getOrDefault(estadoSla, 0L));
         }
         stats.put("porSla", porSla);
-
-        long totalAlertasSla = solicitudes.stream()
-            .filter(s -> s.getFechaPrimeraAlertaSla() != null)
-            .count();
-        long totalEscaladasSla = solicitudes.stream()
-            .filter(s -> s.getFechaEscalamientoSla() != null)
-            .count();
 
         stats.put("totalAlertasSla", totalAlertasSla);
         stats.put("totalEscaladasSla", totalEscaladasSla);
 
         return stats;
+    }
+
+    @Override
+    public Map<String, List<SolicitudResponse>> obtenerDiagramaCalles() {
+        List<SolicitudWorkflow> todas = repository.findAll();
+        Map<String, List<SolicitudResponse>> calles = new LinkedHashMap<>();
+
+        // Initialize empty lanes using the catalogue
+        for (String depto : obtenerCatalogoDepartamentos()) {
+            calles.put(depto, new java.util.ArrayList<>());
+        }
+
+        // Distribute mapped nodes into their lanes
+        for (SolicitudWorkflow sol : todas) {
+            String depto = sol.getDepartamentoActual() != null ? sol.getDepartamentoActual() : "Sistemas";
+            calles.computeIfAbsent(depto, k -> new java.util.ArrayList<>())
+                  .add(mapper.toResponse(sol));
+        }
+
+        return calles;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -440,10 +477,13 @@ public class WorkflowServiceImpl implements WorkflowService {
      * Valida que el revisor pertenezca al departamento de la solicitud.
      */
     private void validarDepartamentoRevisor(SolicitudWorkflow solicitud, String departamentoUsuario) {
-        if (!solicitud.getDepartamentoActual().equalsIgnoreCase(departamentoUsuario)) {
+        String departamentoSolicitud = solicitud.getDepartamentoActual();
+        if (departamentoSolicitud == null
+                || departamentoUsuario == null
+                || !departamentoSolicitud.equalsIgnoreCase(departamentoUsuario)) {
             throw new UnauthorizedActionException(
                     String.format("El revisor del departamento '%s' no puede gestionar solicitudes del departamento '%s'",
-                            departamentoUsuario, solicitud.getDepartamentoActual())
+                            departamentoUsuario, departamentoSolicitud)
             );
         }
     }
@@ -457,15 +497,16 @@ public class WorkflowServiceImpl implements WorkflowService {
         }
 
         String valor = departamento.trim();
+        List<String> validos = obtenerCatalogoDepartamentos();
 
-        return DEPARTAMENTOS_VALIDOS.stream()
+        return validos.stream()
                 .filter(dep -> dep.equalsIgnoreCase(valor))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         String.format(
                                 "Departamento '%s' no válido. Valores permitidos: %s",
                                 departamento,
-                                DEPARTAMENTOS_VALIDOS.stream().collect(Collectors.joining(", "))
+                                String.join(", ", validos)
                         )
                 ));
     }
