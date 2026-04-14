@@ -96,6 +96,11 @@ public interface WorkflowService {
     Map<String, Object> obtenerEstadisticas();
 
     /**
+     * Obtiene el mapa del diagrama por calles de departamento.
+     */
+    Map<String, List<SolicitudResponse>> obtenerDiagramaCalles();
+
+    /**
      * Busca solicitudes por título.
      */
     List<SolicitudResponse> buscarPorTitulo(String titulo);

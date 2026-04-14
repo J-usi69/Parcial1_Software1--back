@@ -7,6 +7,7 @@ import com.workflow.dto.request.CrearUsuarioRequest;
 import com.workflow.dto.response.UsuarioAdminResponse;
 import com.workflow.exception.DuplicateResourceException;
 import com.workflow.exception.ResourceNotFoundException;
+import com.workflow.repository.DepartamentoRepository;
 import com.workflow.repository.UsuarioRepository;
 import com.workflow.service.UsuarioAdminService;
 import lombok.RequiredArgsConstructor;
@@ -23,13 +24,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class UsuarioAdminServiceImpl implements UsuarioAdminService {
 
-    private static final List<String> DEPARTAMENTOS_VALIDOS = List.of(
-            "Sistemas",
-            "Ventas",
-            "Recursos Humanos"
-    );
+    // Departments are dynamically loaded from DB via DepartamentoRepository
 
     private final UsuarioRepository usuarioRepository;
+    private final DepartamentoRepository departamentoRepository;
 
     @Override
     public List<UsuarioAdminResponse> listarUsuarios() {
@@ -84,10 +82,24 @@ public class UsuarioAdminServiceImpl implements UsuarioAdminService {
             existente.setPassword(request.getPassword().trim());
         }
 
+        if (request.getAvatarUrl() != null) {
+            existente.setAvatarUrl(request.getAvatarUrl());
+        }
+
         Usuario actualizado = usuarioRepository.save(existente);
         log.info("Usuario actualizado por admin: {}", actualizado.getUsername());
         return toResponse(actualizado);
     }
+
+    @Override
+    public UsuarioAdminResponse actualizarAvatar(String id, String avatarUrl) {
+        Usuario existente = buscarUsuarioPorId(id);
+        existente.setAvatarUrl(avatarUrl);
+        Usuario actualizado = usuarioRepository.save(existente);
+        log.info("Avatar actualizado para usuario: {}", actualizado.getUsername());
+        return toResponse(actualizado);
+    }
+
 
     @Override
     public void eliminarUsuario(String id) {
@@ -130,14 +142,26 @@ public class UsuarioAdminServiceImpl implements UsuarioAdminService {
 
         String valor = departamento.trim();
 
-        return DEPARTAMENTOS_VALIDOS.stream()
+        // Load valid departments dynamically from DB
+        List<String> validos = departamentoRepository.findAllByOrderByNombreAsc()
+                .stream()
+                .map(d -> d.getNombre())
+                .toList();
+
+        // Fallback to hardcoded list if DB is empty
+        if (validos.isEmpty()) {
+            validos = List.of("Sistemas", "Ventas", "Recursos Humanos");
+        }
+
+        final List<String> validosFinal = validos;
+        return validosFinal.stream()
                 .filter(dep -> dep.equalsIgnoreCase(valor))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         String.format(
                                 "Departamento '%s' no válido. Valores permitidos: %s",
                                 departamento,
-                                String.join(", ", DEPARTAMENTOS_VALIDOS)
+                                String.join(", ", validosFinal)
                         )
                 ));
     }
@@ -150,6 +174,7 @@ public class UsuarioAdminServiceImpl implements UsuarioAdminService {
                 .rol(usuario.getRol())
                 .departamento(usuario.getDepartamento())
                 .fechaCreacion(usuario.getFechaCreacion())
+                .avatarUrl(usuario.getAvatarUrl())
                 .build();
     }
 }

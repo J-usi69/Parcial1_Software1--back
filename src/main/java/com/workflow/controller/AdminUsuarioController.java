@@ -1,11 +1,13 @@
 package com.workflow.controller;
 
 import com.workflow.domain.enums.RolUsuario;
+import com.workflow.domain.model.ArchivoAdjunto;
 import com.workflow.dto.request.ActualizarUsuarioRequest;
 import com.workflow.dto.request.CrearUsuarioRequest;
 import com.workflow.dto.response.ApiResponse;
 import com.workflow.dto.response.UsuarioAdminResponse;
 import com.workflow.exception.UnauthorizedActionException;
+import com.workflow.service.ArchivoStorageService;
 import com.workflow.service.UsuarioAdminService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.List;
@@ -29,6 +32,7 @@ import java.util.Map;
 public class AdminUsuarioController {
 
     private final UsuarioAdminService usuarioAdminService;
+    private final ArchivoStorageService archivoStorageService;
 
     @GetMapping
     @Operation(summary = "Listar usuarios", description = "Retorna todos los usuarios registrados. Solo ADMINISTRADOR.")
@@ -107,6 +111,29 @@ public class AdminUsuarioController {
         payload.put("usernameEliminado", usuarioAEliminar.getUsername());
 
         return ResponseEntity.ok(ApiResponse.ok("Usuario eliminado exitosamente", payload));
+    }
+
+    @PostMapping("/{id}/avatar")
+    @Operation(summary = "Subir avatar", description = "Sube una foto de perfil para el usuario. Solo ADMINISTRADOR.")
+    public ResponseEntity<ApiResponse<UsuarioAdminResponse>> subirAvatar(
+            @PathVariable String id,
+            @RequestParam("archivo") MultipartFile archivo,
+            @RequestHeader(value = "X-Usuario", required = false) String usuario,
+            @RequestHeader(value = "X-Rol", required = false) RolUsuario rolUsuario
+    ) {
+        validarAdministrador(usuario, rolUsuario);
+
+        UsuarioAdminResponse targetUser = usuarioAdminService.obtenerPorId(id);
+        ArchivoAdjunto adjunto = archivoStorageService.almacenarArchivo(archivo, usuario);
+        
+        // Creamos una URL relativa para el avatar (esto depende de cómo sirvas los archivos)
+        // Por ahora usamos el endpoint de descarga si existe, o el nombre almacenado
+        String avatarUrl = "/api/v1/archivos/" + adjunto.getNombreAlmacenado();
+        
+        UsuarioAdminResponse actualizado = usuarioAdminService.actualizarAvatar(id, avatarUrl);
+        
+        log.info("Avatar subido para usuario {}: {}", targetUser.getUsername(), avatarUrl);
+        return ResponseEntity.ok(ApiResponse.ok("Avatar actualizado exitosamente", actualizado));
     }
 
     private void validarAdministrador(String usuario, RolUsuario rolUsuario) {
