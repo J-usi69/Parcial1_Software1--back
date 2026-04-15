@@ -1,0 +1,23 @@
+spring:
+  data:
+    mongodb:
+      # En producción tomará la URL de la variable de entorno MONGO_URI
+      uri: ${MONGO_URI}
+
+  ai:
+    openai:
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai/
+      # En producción tomará la Key de un entorno seguro de Google Cloud
+      api-key: ${GEMINI_API_KEY}
+      chat:
+        options:
+          model: gemini-2.5-flash
+          temperature: 0.1
+
+server:
+  port: ${PORT:8080}
+
+logging:
+  level:
+    root: INFO
+    com.workflow: INFO
