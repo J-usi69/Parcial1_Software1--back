@@ -22,7 +22,7 @@ spring:
           location: us-central1          # Reemplaza con tu región (ej. us-central1)
           chat:
             options:
-              model: gemini-1.5-flash
+              model: gemini-1.5-flash-001
               temperature: 0.1
 
 # Logging
