@@ -9,12 +9,12 @@ spring:
       ai:
         gemini:
           project-id: ${GOOGLE_CLOUD_PROJECT_ID}
-          location: ${GOOGLE_CLOUD_LOCATION:us-central1}
+          location: ${GOOGLE_CLOUD_LOCATION:global}
           # En producción la autenticación se hace usualmente usando ADC (Application Default Credentials)
           # Si usas una cuenta de servicio, la variable de entorno GOOGLE_APPLICATION_CREDENTIALS debe apuntar al .json
           chat:
             options:
-              model: gemini-1.5-flash-001
+              model: ${VERTEX_MODEL:gemini-2.0-flash-001}
               temperature: 0.1
 
 server:
