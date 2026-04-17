@@ -18,11 +18,11 @@ spring:
     vertex:
       ai:
         gemini:
-          project-id: TU_PROJECT_ID_AQUI # Reemplaza con tu Project ID de Google Cloud
+          project-id: project-da37a9fc-9c9e-4d37-822 # Reemplaza con tu Project ID de Google Cloud
           location: us-central1          # Reemplaza con tu región (ej. us-central1)
           chat:
             options:
-              model: gemini-2.5-flash
+              model: gemini-1.5-flash
               temperature: 0.1
 
 # Logging
