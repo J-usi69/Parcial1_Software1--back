@@ -15,15 +15,15 @@ spring:
       auto-index-creation: true
   
   ai:
-    openai:
-      # Google lanzó soporte oficial para la API de OpenAI, permitiendo usar Spring AI OpenAI con Gemini Flash
-      base-url: https://generativelanguage.googleapis.com/v1beta/openai/
-      api-key: AIzaSyCXgUgIBogZ8oyV4TWE8PgQhR8WyZ3l2N4
-      chat:
-        options:
-          # Modelo 2.5 Flash (Gratuito, super rápido y contexto gigante)
-          model: gemini-2.5-flash
-          temperature: 0.1
+    vertex:
+      ai:
+        gemini:
+          project-id: TU_PROJECT_ID_AQUI # Reemplaza con tu Project ID de Google Cloud
+          location: us-central1          # Reemplaza con tu región (ej. us-central1)
+          chat:
+            options:
+              model: gemini-1.5-flash
+              temperature: 0.1
 
 # Logging
 logging:

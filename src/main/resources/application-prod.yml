@@ -5,14 +5,17 @@ spring:
       uri: ${MONGO_URI}
 
   ai:
-    openai:
-      base-url: https://generativelanguage.googleapis.com/v1beta/openai/
-      # En producción tomará la Key de un entorno seguro de Google Cloud
-      api-key: ${GEMINI_API_KEY}
-      chat:
-        options:
-          model: gemini-2.5-flash
-          temperature: 0.1
+    vertex:
+      ai:
+        gemini:
+          project-id: ${GOOGLE_CLOUD_PROJECT_ID}
+          location: ${GOOGLE_CLOUD_LOCATION:us-central1}
+          # En producción la autenticación se hace usualmente usando ADC (Application Default Credentials)
+          # Si usas una cuenta de servicio, la variable de entorno GOOGLE_APPLICATION_CREDENTIALS debe apuntar al .json
+          chat:
+            options:
+              model: gemini-1.5-flash
+              temperature: 0.1
 
 server:
   port: ${PORT:8080}
