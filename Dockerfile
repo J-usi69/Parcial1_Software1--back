@@ -15,12 +15,16 @@ RUN ./mvnw clean package -DskipTests
 # Runtime Stage (Imagen Ligera)
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-# Crear un usuario no-root por seguridad
-RUN addgroup -S spring && adduser -S spring -G spring
+
+# Crear el directorio uploads y asignar permisos correctos al usuario de seguridad ANTES de cambiar a él
+RUN addgroup -S spring && adduser -S spring -G spring && \
+    mkdir -p /app/uploads && \
+    chown -R spring:spring /app
+
 USER spring:spring
 
-# Copiar el jar compilado de la fase builder
-COPY --from=builder /app/target/*.jar app.jar
+# Copiar el jar compilado de la fase builder (asegurando permisos)
+COPY --chown=spring:spring --from=builder /app/target/*.jar app.jar
 
 # Variables de Enteorno por defecto (A ser sobrescritas por Google Cloud Run)
 ENV PORT=8080
