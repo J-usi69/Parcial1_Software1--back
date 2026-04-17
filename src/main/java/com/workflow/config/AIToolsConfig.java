@@ -24,6 +24,7 @@ public class AIToolsConfig {
     private final WorkflowService workflowService;
 
     // Record Data Structures for the Tools
+    public record ToolResponse(String resultado) {}
     public record LeerGlobalRequest() {}
     public record LeerDepartamentoRequest(String departamento) {}
     public record ReasignarRequest(String codigoSeguimiento, String nuevoDepartamento, String justificacion) {}
@@ -31,39 +32,39 @@ public class AIToolsConfig {
 
     @Bean
     @Description("Obtiene la lista de todas las solicitudes y tickets que están actualmente asignadas a un departamento especifico para su analisis.")
-    public Function<LeerDepartamentoRequest, String> analizarColaDepartamentoTool() {
+    public Function<LeerDepartamentoRequest, ToolResponse> analizarColaDepartamentoTool() {
         return request -> {
             log.info("Tool invocada: analizarColaDepartamentoTool ({})", request.departamento());
             List<SolicitudResponse> solicitudes = workflowService.listarPorDepartamento(request.departamento());
             int urgentes = (int) solicitudes.stream().filter(s -> s.getPrioridad() == Prioridad.URGENTE).count();
-            return String.format(
+            return new ToolResponse(String.format(
                     "El departamento %s tiene %d tickets totales. %d son URGENTES. " +
                     "Puedes analizar esto o sugerir acciones.",
                     request.departamento(), solicitudes.size(), urgentes
-            );
+            ));
         };
     }
 
     @Bean
     @Description("Obtiene un resumen global de TODOS los tickets en el sistema, ideal para detectar cuellos de botella y proponer optimizaciones de flujo sugeridas al usuario.")
-    public Function<LeerGlobalRequest, String> analizarSistemaGlobalTool() {
+    public Function<LeerGlobalRequest, ToolResponse> analizarSistemaGlobalTool() {
         return request -> {
             log.info("Tool invocada: analizarSistemaGlobalTool");
             List<SolicitudResponse> todas = workflowService.listarTodas();
-            if (todas.isEmpty()) return "El sistema no tiene tickets registrados actualmente.";
+            if (todas.isEmpty()) return new ToolResponse("El sistema no tiene tickets registrados actualmente.");
             
             long urgentes = todas.stream().filter(s -> s.getPrioridad() == Prioridad.URGENTE).count();
-            return String.format(
+            return new ToolResponse(String.format(
                     "El sistema global tiene %d tickets activos. %d son URGENTES. " +
                     "Analiza estos volúmenes y sugiérele al administrador optimizaciones.",
                     todas.size(), urgentes
-            );
+            ));
         };
     }
 
     @Bean
     @Description("Reasigna o transfiere un ticket (solicitud) de un departamento a otro. Requiere el código de seguimiento (ej. WF-2026-001) y el departamento destino (ej. Sistemas).")
-    public Function<ReasignarRequest, String> reasignarTicketTool() {
+    public Function<ReasignarRequest, ToolResponse> reasignarTicketTool() {
         return request -> {
             log.info("Tool invocada: reasignarTicketTool ({})", request.codigoSeguimiento());
             try {
@@ -74,16 +75,16 @@ public class AIToolsConfig {
                         .build();
                 // Admin mode for AI
                 workflowService.reasignarDepartamento(solicitud.getId(), tr, "IA_CORE", RolUsuario.ADMINISTRADOR, null);
-                return "Ticket " + request.codigoSeguimiento() + " movido exitosamente a " + request.nuevoDepartamento();
+                return new ToolResponse("Ticket " + request.codigoSeguimiento() + " movido exitosamente a " + request.nuevoDepartamento());
             } catch (Exception e) {
-                return "Error al reasignar: " + e.getMessage();
+                return new ToolResponse("Error al reasignar: " + e.getMessage());
             }
         };
     }
 
     @Bean
     @Description("Aprueba, rechaza o cambia el estado lógico de un flujo de trabajo. Requiere el código de seguimiento (ej. WF-2026-001) y el estado nuevo (APROBADO, RECHAZADO, EN_REVISION, PENDIENTE).")
-    public Function<CambiarEstadoRevisorRequest, String> cambiarEstadoTicketTool() {
+    public Function<CambiarEstadoRevisorRequest, ToolResponse> cambiarEstadoTicketTool() {
         return request -> {
             log.info("Tool invocada: cambiarEstadoTicketTool ({})", request.codigoSeguimiento());
             try {
@@ -96,9 +97,9 @@ public class AIToolsConfig {
                         .build();
                 
                 workflowService.cambiarEstado(solicitud.getId(), cr, "IA_CORE", RolUsuario.ADMINISTRADOR, null);
-                return "Ticket " + request.codigoSeguimiento() + " cambiado al estado " + estado;
+                return new ToolResponse("Ticket " + request.codigoSeguimiento() + " cambiado al estado " + estado);
             } catch (Exception e) {
-                return "Error al cambiar estado: " + e.getMessage();
+                return new ToolResponse("Error al cambiar estado: " + e.getMessage());
             }
         };
     }
