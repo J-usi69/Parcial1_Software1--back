@@ -14,7 +14,7 @@ spring:
           # Si usas una cuenta de servicio, la variable de entorno GOOGLE_APPLICATION_CREDENTIALS debe apuntar al .json
           chat:
             options:
-              model: gemini-1.5-flash
+              model: gemini-1.5-flash-001
               temperature: 0.1
 
 server:
