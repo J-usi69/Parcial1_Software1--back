@@ -67,7 +67,7 @@
             <scope>runtime</scope>
             <optional>true</optional>
         </dependency>
-        <!-- Spring AI Vertex AI Gemini Starter -->
+        <!-- Spring AI Vertex AI Gemini Starter (Oficial para GCP Enterprise) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-vertex-ai-gemini-spring-boot-starter</artifactId>

@@ -18,12 +18,11 @@ spring:
     vertex:
       ai:
         gemini:
-          project-id: ${GOOGLE_CLOUD_PROJECT_ID:project-da37a9fc-9c9e-4d37-822}
-          location: ${GOOGLE_CLOUD_LOCATION:us-central1}
-          transport: ${VERTEX_TRANSPORT:REST}
+          project-id: project-da37a9fc-9c9e-4d37-822
+          location: us-central1
           chat:
             options:
-              model: ${VERTEX_MODEL:gemini-2.5-flash}
+              model: gemini-2.5-flash-lite
               temperature: 0.1
 
 # Logging
