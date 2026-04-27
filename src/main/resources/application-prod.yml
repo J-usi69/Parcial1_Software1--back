@@ -1,0 +1,24 @@
+spring:
+  data:
+    mongodb:
+      # En producción tomará la URL de la variable de entorno MONGO_URI
+      uri: ${MONGO_URI}
+
+  ai:
+    vertex:
+      ai:
+        gemini:
+          project-id: parcialsoftware-494020
+          location: us-central1
+          chat:
+            options:
+              model: gemini-2.5-flash
+              temperature: 0.1
+
+server:
+  port: ${PORT:8080}
+
+logging:
+  level:
+    root: INFO
+    com.workflow: INFO
