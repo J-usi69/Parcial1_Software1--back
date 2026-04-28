@@ -26,6 +26,9 @@ USER spring:spring
 # Copiar el jar compilado de la fase builder (asegurando permisos)
 COPY --chown=spring:spring --from=builder /app/target/*.jar app.jar
 
+# Copiar el archivo de credenciales de Firebase (asegurando permisos)
+COPY --chown=spring:spring empresa-22cd0-firebase-adminsdk-fbsvc-f70f471e45.json firebase-credentials.json
+
 # Variables de Enteorno por defecto (A ser sobrescritas por Google Cloud Run)
 ENV PORT=8080
 ENV SPRING_PROFILES_ACTIVE=prod

@@ -11,6 +11,8 @@ import java.util.Optional;
 public interface UserDeviceTokenRepository extends MongoRepository<UserDeviceToken, String> {
     
     List<UserDeviceToken> findByUsuarioId(String usuarioId);
+
+    boolean existsByUsuarioId(String usuarioId);
     
     Optional<UserDeviceToken> findByToken(String token);
     

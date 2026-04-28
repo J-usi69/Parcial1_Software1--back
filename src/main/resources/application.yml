@@ -40,6 +40,9 @@ app:
     dir: ./uploads
   cors:
     allowed-origins: http://localhost:4200
+  firebase:
+    project-id: ${FIREBASE_PROJECT_ID:}
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:}
   workflow:
     tracking-prefix: "WF"
     presencia:

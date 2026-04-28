@@ -8,7 +8,7 @@ spring:
     vertex:
       ai:
         gemini:
-          project-id: 
+          project-id: project-da37a9fc-9c9e-4d37-822
           location: us-central1
           chat:
               options:
@@ -22,4 +22,9 @@ logging:
   level:
     root: INFO
     com.workflow: INFO
-  project-id: parcialsoftware-383c1 # Proyecto para Notificaciones
+  project-id: empresa-22cd0
+
+app:
+  firebase:
+    project-id: ${FIREBASE_PROJECT_ID:empresa-22cd0}
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:}

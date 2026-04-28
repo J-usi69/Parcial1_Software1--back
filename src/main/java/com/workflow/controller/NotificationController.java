@@ -53,4 +53,14 @@ public class NotificationController {
         tokenRepository.deleteByToken(token);
         return ResponseEntity.ok(Map.of("message", "Token unregistered successfully"));
     }
+
+    @GetMapping("/status")
+    public ResponseEntity<?> getStatus(@RequestParam String usuarioId) {
+        if (usuarioId == null || usuarioId.isBlank()) {
+            return ResponseEntity.badRequest().body("usuarioId is required");
+        }
+
+        boolean enabled = tokenRepository.existsByUsuarioId(usuarioId);
+        return ResponseEntity.ok(Map.of("enabled", enabled));
+    }
 }
