@@ -8,12 +8,12 @@ spring:
     vertex:
       ai:
         gemini:
-          project-id: parcialsoftware-494020
+          project-id: 
           location: us-central1
           chat:
-            options:
-              model: gemini-2.5-flash
-              temperature: 0.1
+              options:
+                model: gemini-2.5-flash
+                temperature: 0.1
 
 server:
   port: ${PORT:8080}
@@ -22,3 +22,4 @@ logging:
   level:
     root: INFO
     com.workflow: INFO
+  project-id: parcialsoftware-383c1 # Proyecto para Notificaciones

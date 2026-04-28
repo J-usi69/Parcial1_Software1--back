@@ -19,6 +19,9 @@ import com.workflow.repository.DepartamentoRepository;
 import com.workflow.service.CodigoSeguimientoGenerator;
 import com.workflow.service.ArchivoStorageService;
 import com.workflow.service.WorkflowService;
+import com.workflow.service.FcmService;
+import com.workflow.repository.UserDeviceTokenRepository;
+
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,11 +32,13 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.Year;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -47,10 +52,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class WorkflowServiceImpl implements WorkflowService {
-
-    // NOTE: Departments are now managed dynamically via DepartamentoRepository
 
     private static final Map<Prioridad, Long> SLA_HORAS_POR_PRIORIDAD = Map.of(
             Prioridad.URGENTE, 4L,
@@ -65,6 +67,29 @@ public class WorkflowServiceImpl implements WorkflowService {
     private final SolicitudMapper mapper;
     private final CodigoSeguimientoGenerator codigoGenerator;
     private final ArchivoStorageService archivoStorageService;
+    private final FcmService fcmService;
+    private final UserDeviceTokenRepository tokenRepository;
+
+    public WorkflowServiceImpl(
+            SolicitudWorkflowRepository repository,
+            UsuarioRepository usuarioRepository,
+            DepartamentoRepository departamentoRepository,
+            SolicitudMapper mapper,
+            CodigoSeguimientoGenerator codigoGenerator,
+            ArchivoStorageService archivoStorageService,
+            FcmService fcmService,
+            UserDeviceTokenRepository tokenRepository
+    ) {
+        this.repository = repository;
+        this.usuarioRepository = usuarioRepository;
+        this.departamentoRepository = departamentoRepository;
+        this.mapper = mapper;
+        this.codigoGenerator = codigoGenerator;
+        this.archivoStorageService = archivoStorageService;
+        this.fcmService = fcmService;
+        this.tokenRepository = tokenRepository;
+    }
+
 
     /**
      * Inicializa el generador de códigos con el último secuencial de la BD.
@@ -135,6 +160,8 @@ public class WorkflowServiceImpl implements WorkflowService {
         SolicitudWorkflow guardada = repository.save(solicitud);
         log.info("Solicitud creada: {} por usuario: {} con {} archivos", codigo, usuarioCreador,
                 archivos != null ? archivos.length : 0);
+
+        enviarNotificacionCreacion(guardada);
 
         return mapper.toResponse(guardada);
     }
@@ -213,20 +240,14 @@ public class WorkflowServiceImpl implements WorkflowService {
 
             // Validar la transición de estado según la máquina de estados
             if (!estadoActual.puedeTransicionarA(nuevoEstado)) {
-                throw new InvalidStateTransitionException(
-                        estadoActual.name(), nuevoEstado.name()
-                );
+                throw new InvalidStateTransitionException(estadoActual.name(), nuevoEstado.name());
             }
         } else {
             // SOLICITANTE no puede cambiar estado
-            throw new UnauthorizedActionException(
-                    rol.name(),
-                    "cambiar el estado de solicitudes"
-            );
+            throw new UnauthorizedActionException(rol.name(), "cambiar el estado de solicitudes");
         }
 
-        // Auto-asignación inteligente: Si un REVISOR toma un ticket PENDIENTE para pasarlo a EN_REVISION,
-        // automáticamente se adjudica como responsable, mejorando drásticamente el flujo operativo.
+        // Auto-asignación inteligente
         if (estadoActual == EstadoWorkflow.PENDIENTE && nuevoEstado == EstadoWorkflow.EN_REVISION && rol == RolUsuario.REVISOR) {
             solicitud.setUsuarioAsignado(usuarioResponsable);
             log.info("Ticket {} auto-asignado al revisor {} al iniciar la revisión.", id, usuarioResponsable);
@@ -241,16 +262,96 @@ public class WorkflowServiceImpl implements WorkflowService {
                 request.getComentario()
         );
 
-        SolicitudWorkflow actualizada = repository.save(solicitud);
+        SolicitudWorkflow solicitudActualizada = repository.save(solicitud);
         log.info("Estado cambiado: {} -> {} en solicitud {} por {}",
                 estadoActual, nuevoEstado, id, usuarioResponsable);
 
-        return mapper.toResponse(actualizada);
+        // Notificar al creador de la solicitud sobre el cambio de estado
+        enviarNotificacionCambioEstado(solicitudActualizada);
+
+        return mapper.toResponse(solicitudActualizada);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  REASIGNAR DEPARTAMENTO (Solo ADMINISTRADOR)
-    // ═══════════════════════════════════════════════════════════════
+    private void enviarNotificacionCambioEstado(SolicitudWorkflow solicitud) {
+        String titulo = "Actualización de Solicitud: " + solicitud.getCodigoSeguimiento();
+        String mensaje = String.format("Tu solicitud '%s' ha pasado a estado: %s", 
+                solicitud.getTitulo(), solicitud.getEstado().name());
+
+        Set<String> usuariosANotificar = new HashSet<>();
+        if (solicitud.getUsuarioCreador() != null) {
+            usuariosANotificar.add(solicitud.getUsuarioCreador());
+        }
+        if (solicitud.getUsuarioAsignado() != null && !solicitud.getUsuarioAsignado().isEmpty()) {
+            usuariosANotificar.add(solicitud.getUsuarioAsignado());
+        }
+        agregarAdministradores(usuariosANotificar);
+
+        List<String> tokens = obtenerTokensParaUsuarios(usuariosANotificar);
+
+        fcmService.sendMulticastPushNotification(tokens, titulo, mensaje, Map.of(
+            "solicitudId", solicitud.getId(),
+            "codigo", solicitud.getCodigoSeguimiento()
+        ));
+    }
+
+    private void enviarNotificacionCreacion(SolicitudWorkflow solicitud) {
+        String titulo = "Nueva Solicitud: " + solicitud.getCodigoSeguimiento();
+        String mensaje = String.format("Se creó la solicitud '%s' en %s",
+                solicitud.getTitulo(),
+                solicitud.getDepartamentoActual() != null ? solicitud.getDepartamentoActual() : "el departamento asignado");
+
+        Set<String> usuariosANotificar = new HashSet<>();
+        if (solicitud.getUsuarioCreador() != null) {
+            usuariosANotificar.add(solicitud.getUsuarioCreador());
+        }
+        agregarAdministradores(usuariosANotificar);
+        agregarRevisoresDepartamento(usuariosANotificar, solicitud.getDepartamentoActual());
+
+        List<String> tokens = obtenerTokensParaUsuarios(usuariosANotificar);
+
+        fcmService.sendMulticastPushNotification(tokens, titulo, mensaje, Map.of(
+            "solicitudId", solicitud.getId(),
+            "codigo", solicitud.getCodigoSeguimiento(),
+            "evento", "CREACION"
+        ));
+    }
+
+    private void agregarAdministradores(Set<String> usuarios) {
+        usuarioRepository.findByRol(RolUsuario.ADMINISTRADOR).stream()
+                .map(u -> u.getUsername())
+                .filter(u -> u != null && !u.isBlank())
+                .forEach(usuarios::add);
+    }
+
+    private void agregarRevisoresDepartamento(Set<String> usuarios, String departamento) {
+        if (departamento == null || departamento.isBlank()) {
+            return;
+        }
+
+        usuarioRepository.findByRolAndDepartamentoIgnoreCase(RolUsuario.REVISOR, departamento).stream()
+                .map(u -> u.getUsername())
+                .filter(u -> u != null && !u.isBlank())
+                .forEach(usuarios::add);
+    }
+
+    private List<String> obtenerTokensParaUsuarios(Set<String> usuarios) {
+        if (usuarios.isEmpty()) {
+            return List.of();
+        }
+
+        Set<String> tokens = new HashSet<>();
+        for (String usuarioId : usuarios) {
+            tokenRepository.findByUsuarioId(usuarioId).stream()
+                    .map(device -> device.getToken())
+                    .filter(token -> token != null && !token.isBlank())
+                    .forEach(tokens::add);
+        }
+
+        return tokens.stream().toList();
+    }
+
+    // REASIGNAR DEPARTAMENTO (Solo ADMINISTRADOR)
+
 
     @Override
     public SolicitudResponse reasignarDepartamento(
@@ -291,16 +392,16 @@ public class WorkflowServiceImpl implements WorkflowService {
                 rolUsuario.name(),
                 String.format("Reasignado de '%s' a '%s'. %s",
                         departamentoAnterior,
-                departamentoNormalizado,
+                        departamentoNormalizado,
                         request.getComentario() != null ? request.getComentario() : "")
         );
 
-        SolicitudWorkflow actualizada = repository.save(solicitud);
+        SolicitudWorkflow solicitudActualizada = repository.save(solicitud);
         log.info("Solicitud {} reasignada de '{}' a '{}' por {}",
             id, departamentoAnterior, departamentoNormalizado,
                 usuarioResponsable);
 
-        return mapper.toResponse(actualizada);
+        return mapper.toResponse(solicitudActualizada);
     }
 
     @Override
@@ -376,10 +477,10 @@ public class WorkflowServiceImpl implements WorkflowService {
                 comentario
         );
 
-        SolicitudWorkflow actualizada = repository.save(solicitud);
+        SolicitudWorkflow solicitudActualizada = repository.save(solicitud);
         log.info("Usuario '{}' asignado a solicitud {} por {}", usuarioAsignado, id, usuarioResponsable);
 
-        return mapper.toResponse(actualizada);
+        return mapper.toResponse(solicitudActualizada);
     }
 
     // ═══════════════════════════════════════════════════════════════

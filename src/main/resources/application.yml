@@ -18,7 +18,7 @@ spring:
     vertex:
       ai:
         gemini:
-          project-id: parcialsoftware-494020
+          project-id: 
           location: us-central1
           chat:
             options:
@@ -51,3 +51,5 @@ app:
         enabled: true
         fixed-delay-ms: 300000
         initial-delay-ms: 20000
+
+
