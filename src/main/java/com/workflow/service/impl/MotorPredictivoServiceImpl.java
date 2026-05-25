@@ -46,7 +46,7 @@ public class MotorPredictivoServiceImpl implements MotorPredictivoService {
             
             // 2. Simulación de Inferencia (Neuronas de Salida)
             // Aquí el modelo TensorFlow procesaría los pesos
-            float[] outputExito = input.mean().toArray(); // Mock de lógica de capas densas
+            float[] outputExito = input.mean().toFloatArray(); // Mock de lógica de capas densas
             
             double probabilidad = Math.min(0.99, Math.max(0.1, 0.85 + (outputExito[0] * 0.1)));
             double riesgo = 1.0 - probabilidad;

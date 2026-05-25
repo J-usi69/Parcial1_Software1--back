@@ -20,6 +20,7 @@ import java.util.List;
 public class WorkflowDefinitionController {
 
     private final WorkflowDefinitionService definitionService;
+    private final com.workflow.config.DataSeeder dataSeeder;
 
     @GetMapping
     @Operation(summary = "Listar todas las definiciones", description = "Recupera todas las definiciones de workflows BPMN persistidas")
@@ -53,8 +54,8 @@ public class WorkflowDefinitionController {
     @PostMapping("/reset-seed")
     @Operation(summary = "Resetear y Seedear base de datos", description = "ELIMINA todas las definiciones y re-inyecta los procesos maestros de la lógica de negocio.")
     public ResponseEntity<ApiResponse<Void>> resetAndSeed() {
-        log.warn("POST /api/v1/bpmn/definitions/reset-seed - Ejecutando limpieza y recarga");
-        definitionService.resetAndSeed();
-        return ResponseEntity.ok(ApiResponse.ok("Base de datos de procesos reseteada y cargada con éxito", null));
+        log.warn("POST /api/v1/bpmn/definitions/reset-seed - Ejecutando limpieza y recarga completa del entorno de pruebas");
+        dataSeeder.forceSeed();
+        return ResponseEntity.ok(ApiResponse.ok("Entorno de pruebas y base de datos reseteados y cargados con éxito", null));
     }
 }
