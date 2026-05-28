@@ -26,9 +26,6 @@ USER spring:spring
 # Copiar el jar compilado (usando un patrón más específico si es posible, o renombrándolo en el builder)
 COPY --chown=spring:spring --from=builder /app/target/workflow-backend-*.jar app.jar
 
-# Copiar el archivo de credenciales de Firebase (asegurando permisos)
-COPY --chown=spring:spring empresa-22cd0-firebase-adminsdk-fbsvc-f70f471e45.json firebase-credentials.json
-
 # Variables de Enteorno por defecto (A ser sobrescritas por Google Cloud Run)
 ENV PORT=8080
 ENV SPRING_PROFILES_ACTIVE=prod
