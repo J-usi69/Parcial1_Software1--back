@@ -22,11 +22,12 @@ logging:
   level:
     root: INFO
     com.workflow: INFO
-  project-id: empresa-22cd0
 
 app:
   uploads:
     dir: /tmp/uploads
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
   firebase:
-    project-id: empresa-22cd0 # Este ID es el que el SDK usará para enviar los mensajes
-    # credentials-path: # ELIMINA O DEJA VACÍO ESTO. Google lo detectará automáticamente.
+    project-id: ${FIREBASE_PROJECT_ID:empresa-22cd0}
+    # credentials-path se omite en Cloud Run; Google ADC lo detecta automáticamente.
