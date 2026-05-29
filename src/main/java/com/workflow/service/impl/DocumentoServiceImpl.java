@@ -111,6 +111,8 @@ public class DocumentoServiceImpl implements DocumentoService {
                 .tipo("COLLABORATIVE")
                 .versionActual(1)
                 .creadoPor(usuario)
+                .bloqueadoPor(usuario)
+                .bloqueadoAt(LocalDateTime.now())
                 .fechaCreacion(LocalDateTime.now())
                 .fechaActualizacion(LocalDateTime.now())
                 .contenidoColaborativo(contenidoInicial)

@@ -38,6 +38,8 @@ logging:
 app:
   uploads:
     dir: ./uploads
+  gcp:
+    bucket-name: ${GCS_BUCKET_NAME:your-gcs-bucket-name}
   cors:
     allowed-origins: http://localhost:4200
   firebase:

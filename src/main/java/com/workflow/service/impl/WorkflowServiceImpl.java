@@ -27,6 +27,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -123,6 +124,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     }
 
     @Override
+    @Transactional
     public SolicitudResponse crearSolicitudConArchivos(CrearSolicitudRequest request, org.springframework.web.multipart.MultipartFile[] archivos, String usuarioCreador, RolUsuario rolUsuario) {
         // Validar que solo SOLICITANTE o ADMINISTRADOR pueden crear
         if (!rolUsuario.puedeCrearSolicitud()) {
@@ -224,6 +226,7 @@ public class WorkflowServiceImpl implements WorkflowService {
     // ═══════════════════════════════════════════════════════════════
 
     @Override
+    @Transactional
     public SolicitudResponse cambiarEstado(String id, CambiarEstadoRequest request, String usuarioResponsable, RolUsuario rolUsuario, String departamentoUsuario) {
         SolicitudWorkflow solicitud = buscarSolicitudPorId(id);
         RolUsuario rol = rolUsuario;
@@ -362,6 +365,7 @@ public class WorkflowServiceImpl implements WorkflowService {
 
 
     @Override
+    @Transactional
     public SolicitudResponse reasignarDepartamento(
             String id,
             ReasignarDepartamentoRequest request,
