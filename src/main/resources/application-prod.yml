@@ -1,14 +1,14 @@
 spring:
   data:
     mongodb:
-      # En producción tomará la URL de la variable de entorno MONGO_URI
-      uri: ${MONGO_URI}
+      # En producción tomará la URL de la variable de entorno MONGO_URI, con fallback local
+      uri: ${MONGO_URI:mongodb://localhost:27017/workflow}
 
   ai:
     vertex:
       ai:
         gemini:
-          project-id: ${GCP_PROJECT_ID}
+          project-id: ${GCP_PROJECT_ID:}
           location: us-central1
           chat:
               options:
@@ -27,9 +27,9 @@ app:
   uploads:
     dir: /tmp/uploads
   gcp:
-    bucket-name: ${GCS_BUCKET_NAME}
+    bucket-name: ${GCS_BUCKET_NAME:}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
   firebase:
-    project-id: ${FIREBASE_PROJECT_ID}
+    project-id: ${FIREBASE_PROJECT_ID:}
     # credentials-path se omite en Cloud Run; Google ADC lo detecta automáticamente.
